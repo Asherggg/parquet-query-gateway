@@ -193,6 +193,12 @@ export PARQUET_GATEWAY_URL=http://127.0.0.1:8080
 export PARQUET_GATEWAY_TOKEN=replace-with-secret-token
 ```
 
+如果使用飞书登录，设置飞书授权 URL：
+
+```bash
+export PARQUET_FEISHU_AUTH_URL="https://open.feishu.cn/open-apis/authen/v1/authorize?..."
+```
+
 ## 第 7 步 验证
 
 验证服务：
@@ -205,7 +211,7 @@ curl http://127.0.0.1:8080/health
 
 ```bash
 opencli parquet datasets
-opencli parquet login auth-code-from-feishu --redirect-uri "http://127.0.0.1:8765/callback"
+opencli parquet login
 opencli parquet schema orders
 opencli parquet query orders --select order_id,region,amount --limit 10
 ```
@@ -244,23 +250,30 @@ docker compose up --build -d
 
 不要把飞书 App Secret 放进 OpenCLI 插件或用户本机配置。
 
-当前版本的登录命令接收飞书授权码：
+当前版本的登录命令会自动打开浏览器并监听本机回调：
 
 ```bash
-opencli parquet login auth-code-from-feishu --redirect-uri "http://127.0.0.1:8765/callback"
+export PARQUET_FEISHU_AUTH_URL="https://open.feishu.cn/open-apis/authen/v1/authorize?..."
+opencli parquet login
 ```
 
-命令返回 `PARQUET_GATEWAY_TOKEN` 后，将其设置为环境变量：
+`login` 会监听：
+
+```text
+http://127.0.0.1:8765/callback
+```
+
+飞书回调成功后，命令会把 token 保存到：
+
+```text
+~/.parquet-gateway/token.json
+```
+
+命令返回 `PARQUET_GATEWAY_TOKEN` 后，也可以手动将其设置为环境变量：
 
 ```bash
 export PARQUET_GATEWAY_TOKEN=pgw.xxx
 ```
-
-如果需要完全一键化登录，下一阶段可以继续补：
-
-- 自动打开飞书授权 URL。
-- 本机临时监听 `127.0.0.1:8765/callback`。
-- 自动保存 token 到本地配置文件。
 
 ## 常见问题
 

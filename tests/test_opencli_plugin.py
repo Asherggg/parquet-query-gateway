@@ -29,6 +29,17 @@ def test_opencli_plugin_login_uses_feishu_exchange():
     assert "PARQUET_GATEWAY_TOKEN" in source
 
 
+def test_opencli_plugin_login_is_one_click_flow():
+    source = (ROOT / "login.js").read_text(encoding="utf-8")
+
+    assert "createServer" in source
+    assert "openBrowser" in source
+    assert "waitForCallbackCode" in source
+    assert "saveGatewayToken" in source
+    assert "PARQUET_FEISHU_AUTH_URL" in source
+    assert "http://127.0.0.1:8765/callback" in source
+
+
 def test_opencli_plugin_query_uses_gateway_not_local_files():
     source = (ROOT / "query.js").read_text(encoding="utf-8")
     client_source = (ROOT / "gateway-client.js").read_text(encoding="utf-8")

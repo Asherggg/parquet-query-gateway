@@ -11,13 +11,16 @@ function gatewayToken() {
 }
 
 export async function gatewayRequest(path, options = {}) {
+  const headers = {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+  };
+  if (options.auth !== false) {
+    headers.Authorization = `Bearer ${gatewayToken()}`;
+  }
   const response = await fetch(`${gatewayBaseUrl()}${path}`, {
     method: options.method || 'GET',
-    headers: {
-      Authorization: `Bearer ${gatewayToken()}`,
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
   const text = await response.text();

@@ -115,11 +115,17 @@ $env:PARQUET_GATEWAY_URL = "http://127.0.0.1:8080"
 $env:PARQUET_GATEWAY_TOKEN = "analyst-token"
 ```
 
+如果使用飞书登录，先设置飞书授权 URL：
+
+```bash
+$env:PARQUET_FEISHU_AUTH_URL = "https://open.feishu.cn/open-apis/authen/v1/authorize?..."
+```
+
 通过 OpenCLI 使用：
 
 ```bash
 opencli parquet datasets
-opencli parquet login auth-code-from-feishu --redirect-uri "http://127.0.0.1:8765/callback"
+opencli parquet login
 opencli parquet schema orders
 opencli parquet query orders --select order_id,region,amount --where "amount>=10" --limit 100
 opencli parquet audit --limit 50
@@ -205,10 +211,17 @@ curl -X POST http://127.0.0.1:8080/query \
 示例：
 
 ```bash
-opencli parquet login auth-code-from-feishu --redirect-uri "http://127.0.0.1:8765/callback"
+export PARQUET_FEISHU_AUTH_URL="https://open.feishu.cn/open-apis/authen/v1/authorize?..."
+opencli parquet login
 ```
 
-命令会返回 `PARQUET_GATEWAY_TOKEN` 字段。把它设置到环境变量后即可查询：
+`login` 会自动打开浏览器，监听本机 `127.0.0.1:8765/callback`，拿到飞书授权码后向网关换取 token，并保存到：
+
+```text
+~/.parquet-gateway/token.json
+```
+
+命令也会返回 `PARQUET_GATEWAY_TOKEN` 字段。把它设置到环境变量后即可查询：
 
 ```bash
 export PARQUET_GATEWAY_TOKEN=pgw.xxx
@@ -220,8 +233,6 @@ export PARQUET_GATEWAY_TOKEN=pgw.xxx
 - 可以把飞书 open_id、邮箱、部门或用户组映射成 `analyst`、`admin` 等内部角色。
 - 飞书 App Secret 只保存在服务端配置里，不进入 OpenCLI 插件和用户本机。
 - 后续也可以替换成公司 SSO/OIDC，不影响 `opencli parquet ...` 命令形态。
-
-注意：当前版本完成了“授权码换网关 token”的服务端能力。完整浏览器自动打开授权页、本地 `127.0.0.1` 临时回调监听和自动保存 token 可以作为下一阶段增强。
 
 ## 测试
 
