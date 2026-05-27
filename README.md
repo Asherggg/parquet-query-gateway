@@ -59,6 +59,21 @@ datasets:
     row_policy:
       field: region
       source: attributes.regions
+
+auth:
+  gateway_token_secret: replace-with-long-random-secret
+  token_ttl_seconds: 28800
+  feishu:
+    enabled: true
+    app_id: cli_xxx
+    app_secret: replace-with-feishu-app-secret
+    redirect_uri: http://127.0.0.1:8765/callback
+  feishu_users:
+    - open_id: ou_xxx
+      id: alice
+      roles: [analyst]
+      attributes:
+        regions: [US, EU]
 ```
 
 权限含义：
@@ -104,6 +119,7 @@ $env:PARQUET_GATEWAY_TOKEN = "analyst-token"
 
 ```bash
 opencli parquet datasets
+opencli parquet login auth-code-from-feishu --redirect-uri "http://127.0.0.1:8765/callback"
 opencli parquet schema orders
 opencli parquet query orders --select order_id,region,amount --where "amount>=10" --limit 100
 opencli parquet audit --limit 50
@@ -174,7 +190,7 @@ curl -X POST http://127.0.0.1:8080/query \
 
 ## 飞书授权
 
-可以接飞书授权，推荐接在服务端，而不是接在 OpenCLI 插件里。
+飞书授权已接在服务端。OpenCLI 插件提供 `login` 命令，把飞书授权码交给网关换取 `PARQUET_GATEWAY_TOKEN`。
 
 推荐流程：
 
@@ -186,13 +202,26 @@ curl -X POST http://127.0.0.1:8080/query \
   -> OpenCLI 插件携带 PARQUET_GATEWAY_TOKEN 调用网关
 ```
 
+示例：
+
+```bash
+opencli parquet login auth-code-from-feishu --redirect-uri "http://127.0.0.1:8765/callback"
+```
+
+命令会返回 `PARQUET_GATEWAY_TOKEN` 字段。把它设置到环境变量后即可查询：
+
+```bash
+export PARQUET_GATEWAY_TOKEN=pgw.xxx
+```
+
 这样做的原因：
 
 - 权限仍然集中在服务端，OpenCLI 插件不能伪造角色。
-- 可以把飞书部门、用户组或邮箱映射成 `analyst`、`admin` 等内部角色。
+- 可以把飞书 open_id、邮箱、部门或用户组映射成 `analyst`、`admin` 等内部角色。
+- 飞书 App Secret 只保存在服务端配置里，不进入 OpenCLI 插件和用户本机。
 - 后续也可以替换成公司 SSO/OIDC，不影响 `opencli parquet ...` 命令形态。
 
-第一阶段可以继续使用 YAML token；生产阶段建议把 `users` 替换为飞书登录后的用户映射和短期 token 存储。
+注意：当前版本完成了“授权码换网关 token”的服务端能力。完整浏览器自动打开授权页、本地 `127.0.0.1` 临时回调监听和自动保存 token 可以作为下一阶段增强。
 
 ## 测试
 

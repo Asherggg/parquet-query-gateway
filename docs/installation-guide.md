@@ -121,6 +121,21 @@ datasets:
     row_policy:
       field: region
       source: attributes.regions
+
+auth:
+  gateway_token_secret: replace-with-long-random-secret
+  token_ttl_seconds: 28800
+  feishu:
+    enabled: true
+    app_id: cli_xxx
+    app_secret: replace-with-feishu-app-secret
+    redirect_uri: http://127.0.0.1:8765/callback
+  feishu_users:
+    - open_id: ou_xxx
+      id: alice
+      roles: [analyst]
+      attributes:
+        regions: [US, EU]
 ```
 
 注意：
@@ -190,6 +205,7 @@ curl http://127.0.0.1:8080/health
 
 ```bash
 opencli parquet datasets
+opencli parquet login auth-code-from-feishu --redirect-uri "http://127.0.0.1:8765/callback"
 opencli parquet schema orders
 opencli parquet query orders --select order_id,region,amount --limit 10
 ```
@@ -216,7 +232,7 @@ docker compose up --build -d
 
 ## 飞书授权说明
 
-如果要接飞书授权，建议把飞书 OAuth/OIDC 接在 FastAPI 服务端：
+飞书 OAuth 已接在 FastAPI 服务端：
 
 ```text
 飞书登录
@@ -227,6 +243,24 @@ docker compose up --build -d
 ```
 
 不要把飞书 App Secret 放进 OpenCLI 插件或用户本机配置。
+
+当前版本的登录命令接收飞书授权码：
+
+```bash
+opencli parquet login auth-code-from-feishu --redirect-uri "http://127.0.0.1:8765/callback"
+```
+
+命令返回 `PARQUET_GATEWAY_TOKEN` 后，将其设置为环境变量：
+
+```bash
+export PARQUET_GATEWAY_TOKEN=pgw.xxx
+```
+
+如果需要完全一键化登录，下一阶段可以继续补：
+
+- 自动打开飞书授权 URL。
+- 本机临时监听 `127.0.0.1:8765/callback`。
+- 自动保存 token 到本地配置文件。
 
 ## 常见问题
 

@@ -33,6 +33,35 @@ class RowPolicyConfig(BaseModel):
     source: str
 
 
+class FeishuConfig(BaseModel):
+    enabled: bool = False
+    app_id: str = ""
+    app_secret: str = ""
+    redirect_uri: str = "http://127.0.0.1:8765/callback"
+
+
+class FeishuUserConfig(BaseModel):
+    open_id: str | None = None
+    email: str | None = None
+    id: str
+    roles: list[str] = Field(default_factory=list)
+    attributes: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("roles")
+    @classmethod
+    def require_roles(cls, value: list[str]) -> list[str]:
+        if not value:
+            raise ValueError("feishu user must have at least one role")
+        return value
+
+
+class AuthConfig(BaseModel):
+    gateway_token_secret: str
+    token_ttl_seconds: int = Field(default=28_800, ge=60)
+    feishu: FeishuConfig = Field(default_factory=FeishuConfig)
+    feishu_users: list[FeishuUserConfig] = Field(default_factory=list)
+
+
 class DatasetConfig(BaseModel):
     description: str = ""
     path: str
@@ -50,6 +79,7 @@ class DatasetConfig(BaseModel):
 
 class GatewayConfig(BaseModel):
     settings: Settings = Field(default_factory=Settings)
+    auth: AuthConfig | None = None
     users: list[UserConfig]
     datasets: dict[str, DatasetConfig]
 

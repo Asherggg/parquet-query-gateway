@@ -15,16 +15,18 @@ from parquet_gateway.config import GatewayConfig, load_config
 from parquet_gateway.errors import GatewayError
 from parquet_gateway.errors import PermissionDenied
 from parquet_gateway.executor import DuckDBExecutor
+from parquet_gateway.feishu import FeishuExchangeRequest, FeishuOAuthClient, exchange_feishu_code_for_gateway_token
 from parquet_gateway.models import QueryRequest, QueryResponse
 from parquet_gateway.policy import list_visible_datasets, resolve_dataset_access
 from parquet_gateway.query_builder import compile_query
 
 
-def create_app() -> FastAPI:
+def create_app(feishu_client=None) -> FastAPI:
     config = get_config()
     authenticator = TokenAuthenticator(config)
     audit = AuditLog(os.environ.get("PARQUET_GATEWAY_AUDIT_DB", "audit.sqlite3"))
     executor = DuckDBExecutor(config)
+    actual_feishu_client = feishu_client or FeishuOAuthClient(config)
 
     app = FastAPI(title="Parquet Query Gateway", version="0.1.0")
 
@@ -95,6 +97,10 @@ def create_app() -> FastAPI:
             raise PermissionDenied("admin role is required to read audit events")
         bounded_limit = min(max(limit, 1), 1000)
         return {"events": audit.recent(bounded_limit)}
+
+    @app.post("/auth/feishu/exchange")
+    def feishu_exchange(request: FeishuExchangeRequest) -> dict[str, object]:
+        return exchange_feishu_code_for_gateway_token(config, actual_feishu_client, request)
 
     app.state.config = config
     app.state.audit = audit
