@@ -15,7 +15,7 @@ def test_opencli_plugin_manifest_exists():
 
 
 def test_opencli_plugin_commands_register_parquet_site():
-    for filename in ["datasets.js", "schema.js", "query.js", "audit.js", "login.js"]:
+    for filename in ["datasets.js", "schema.js", "query.js", "audit.js", "login.js", "smoke-test.js"]:
         source = (ROOT / filename).read_text(encoding="utf-8")
         assert "from '@jackwener/opencli/registry'" in source
         assert "site: 'parquet'" in source
@@ -47,4 +47,13 @@ def test_opencli_plugin_query_uses_gateway_not_local_files():
     assert "PARQUET_GATEWAY_URL" in client_source
     assert "PARQUET_GATEWAY_TOKEN" in client_source
     assert "read_parquet" not in source
+    assert "/query" in source
+
+
+def test_opencli_plugin_has_smoke_test_command():
+    source = (ROOT / "smoke-test.js").read_text(encoding="utf-8")
+
+    assert "name: 'smoke-test'" in source
+    assert "/health" in source
+    assert "/datasets" in source
     assert "/query" in source

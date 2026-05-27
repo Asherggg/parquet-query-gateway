@@ -5,8 +5,11 @@ import json
 import os
 import re
 import sys
+from pathlib import Path
 from typing import Any, Protocol
 from urllib import error, request
+
+from parquet_gateway.bootstrap import write_initial_config
 
 
 class JSONClient(Protocol):
@@ -42,7 +45,11 @@ class GatewayHTTPClient:
 def main(argv: list[str] | None = None, client: JSONClient | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    actual_client = client or client_from_environment()
+
+    if args.command == "init-config":
+        output = run_init_config(args)
+    else:
+        actual_client = client or client_from_environment()
 
     if args.command == "datasets":
         output = actual_client.request_json("GET", "/datasets")
@@ -61,6 +68,10 @@ def main(argv: list[str] | None = None, client: JSONClient | None = None) -> int
         output = actual_client.request_json("POST", "/query", payload)
     elif args.command == "audit":
         output = actual_client.request_json("GET", f"/admin/audit?limit={args.limit}")
+    elif args.command == "smoke-test":
+        output = run_smoke_test(actual_client)
+    elif args.command == "init-config":
+        pass
     else:
         parser.error("unknown command")
 
@@ -73,6 +84,14 @@ def build_parser() -> argparse.ArgumentParser:
     subcommands = parser.add_subparsers(dest="command", required=True)
 
     subcommands.add_parser("datasets", help="List datasets visible to the current token")
+
+    init_config = subcommands.add_parser("init-config", help="Generate production.yml from a Parquet data root")
+    init_config.add_argument("--data-root", default="/home/ai_ds/sd_data_center", help="Directory containing dataset folders")
+    init_config.add_argument("--output", default="config/production.yml", help="Config YAML path to write")
+    init_config.add_argument("--overwrite", action="store_true", help="Overwrite an existing config file")
+    init_config.add_argument("--admin-token", help="Admin bearer token; generated if omitted")
+    init_config.add_argument("--analyst-token", help="Analyst bearer token; generated if omitted")
+    init_config.add_argument("--gateway-token-secret", help="Secret for dynamic gateway tokens; generated if omitted")
 
     schema = subcommands.add_parser("schema", help="Show visible schema for a dataset")
     schema.add_argument("dataset")
@@ -88,6 +107,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     audit = subcommands.add_parser("audit", help="Show recent audit events; requires admin role")
     audit.add_argument("--limit", type=int, default=100)
+
+    subcommands.add_parser("smoke-test", help="Check health, datasets, schema, and a one-row query")
     return parser
 
 
@@ -179,6 +200,53 @@ def parse_order_by(expr: str) -> tuple[str, str]:
     if len(parts) == 2 and parts[1] in {"asc", "desc"}:
         return parts[0], parts[1]
     raise SystemExit(f"invalid --order-by expression: {expr}")
+
+
+def run_init_config(args: argparse.Namespace) -> dict[str, Any]:
+    config, generated = write_initial_config(
+        data_root=Path(args.data_root),
+        output_path=Path(args.output),
+        overwrite=args.overwrite,
+        admin_token=args.admin_token,
+        analyst_token=args.analyst_token,
+        gateway_token_secret=args.gateway_token_secret,
+    )
+    return {
+        "ok": True,
+        "path": str(Path(args.output)),
+        "dataset_count": len(config["datasets"]),
+        "datasets": sorted(config["datasets"].keys()),
+        "admin_token": generated["admin_token"],
+        "analyst_token": generated["analyst_token"],
+    }
+
+
+def run_smoke_test(client: JSONClient) -> dict[str, Any]:
+    health = client.request_json("GET", "/health")
+    datasets_payload = client.request_json("GET", "/datasets")
+    datasets = datasets_payload.get("datasets") or []
+    if not datasets:
+        raise SystemExit("gateway returned no visible datasets")
+
+    dataset = datasets[0]["id"]
+    schema = client.request_json("GET", f"/datasets/{dataset}/schema")
+    columns = schema.get("columns") or []
+    if not columns:
+        raise SystemExit(f"dataset {dataset!r} has no visible columns")
+
+    query = client.request_json("POST", "/query", {
+        "dataset": dataset,
+        "select": [columns[0]],
+        "limit": 1,
+    })
+    return {
+        "ok": True,
+        "health": health,
+        "dataset": dataset,
+        "visible_dataset_count": len(datasets),
+        "first_column": columns[0],
+        "query_row_count": query.get("row_count", 0),
+    }
 
 
 if __name__ == "__main__":

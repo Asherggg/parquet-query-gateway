@@ -16,6 +16,24 @@ Parquet 文件统一放在：
 
 完整安装流程见：[Parquet 查询网关安装指南](docs/installation-guide.md)。
 
+公开仓库后推荐一键安装：
+
+```bash
+git clone https://github.com/guo1jing12/parquet-query-gateway.git
+cd parquet-query-gateway
+bash scripts/install.sh --data-root /home/ai_ds/sd_data_center
+```
+
+Windows PowerShell：
+
+```powershell
+git clone https://github.com/guo1jing12/parquet-query-gateway.git
+cd parquet-query-gateway
+.\scripts\install.ps1 -DataRoot "/home/ai_ds/sd_data_center"
+```
+
+手动开发安装：
+
 ```bash
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
@@ -32,7 +50,15 @@ uvicorn parquet_gateway.app:create_app --factory --host 0.0.0.0 --port 8080
 
 ## 生产配置
 
-在服务器上创建 `config/production.yml`：
+推荐自动扫描数据目录生成 `config/production.yml`：
+
+```bash
+parquet-gw init-config --data-root /home/ai_ds/sd_data_center --output config/production.yml
+```
+
+该命令会为每个可读 Parquet 子目录生成 dataset，并自动生成 admin/analyst token。
+
+也可以手动创建 `config/production.yml`：
 
 ```yaml
 settings:
@@ -105,7 +131,7 @@ sudo systemctl enable --now parquet-gateway
 推荐把本项目作为 OpenCLI 插件安装：
 
 ```bash
-opencli plugin install file:///absolute/path/to/this/project
+opencli plugin install "file://$PWD"
 ```
 
 设置网关地址和访问 token：
@@ -125,6 +151,7 @@ $env:PARQUET_FEISHU_AUTH_URL = "https://open.feishu.cn/open-apis/authen/v1/autho
 
 ```bash
 opencli parquet datasets
+opencli parquet smoke-test
 opencli parquet login
 opencli parquet schema orders
 opencli parquet query orders --select order_id,region,amount --where "amount>=10" --limit 100
@@ -135,6 +162,7 @@ opencli parquet audit --limit 50
 
 ```bash
 parquet-gw datasets
+parquet-gw smoke-test
 parquet-gw schema orders
 parquet-gw query orders --select order_id,amount --where "region in [\"US\",\"EU\"]"
 parquet-gw audit --limit 50

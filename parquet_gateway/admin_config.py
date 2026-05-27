@@ -5,9 +5,9 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-import pyarrow.parquet as pq
 from pydantic import ValidationError
 
+from parquet_gateway.bootstrap import discover_data_root
 from parquet_gateway.config import GatewayConfig
 from parquet_gateway.errors import BadQuery
 
@@ -34,33 +34,12 @@ def save_admin_config_yaml(config_path: Path, yaml_text: str) -> dict[str, objec
 def discover_parquet_datasets(config: GatewayConfig) -> dict[str, object]:
     data_root = Path(config.settings.data_root)
     configured = set(config.datasets.keys())
-    datasets: list[dict[str, object]] = []
     if not data_root.exists():
-        return {"data_root": str(data_root), "datasets": datasets}
+        return {"data_root": str(data_root), "datasets": []}
 
-    for child in sorted((path for path in data_root.iterdir() if path.is_dir()), key=lambda path: path.name):
-        parquet_files = [path for path in sorted(child.iterdir()) if path.is_file() and not path.name.startswith(".")]
-        schema = None
-        schema_file: Path | None = None
-        for parquet_file in parquet_files:
-            try:
-                schema = pq.read_schema(parquet_file)
-                schema_file = parquet_file
-                break
-            except Exception:
-                continue
-        if schema is None:
-            continue
-        columns = [field.name for field in schema]
-        path_pattern = f"{child.name}/*.parquet" if schema_file and schema_file.suffix == ".parquet" else f"{child.name}/*"
-        datasets.append({
-            "id": child.name,
-            "path": path_pattern,
-            "description": child.name,
-            "columns": columns,
-            "configured": child.name in configured,
-            "file_count": len(parquet_files),
-        })
+    datasets = []
+    for dataset in discover_data_root(data_root):
+        datasets.append({**dataset, "configured": dataset["id"] in configured})
     return {"data_root": str(data_root), "datasets": datasets}
 
 

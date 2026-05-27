@@ -8,3 +8,5 @@ __pycache__/
 sample-data/
 .ruff_cache/
 *.egg-info/
+.tmp/
+node_modules/

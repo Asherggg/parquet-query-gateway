@@ -19,6 +19,8 @@ class FakeHTTPClient:
             return {"rows": [{"order_id": 1, "amount": 10.0}], "row_count": 1}
         if path == "/admin/audit?limit=25":
             return {"events": [{"user_id": "alice", "allowed": True}]}
+        if path == "/health":
+            return {"status": "ok"}
         raise AssertionError(path)
 
 
@@ -86,3 +88,21 @@ def test_cli_reads_audit_events(capsys):
     assert code == 0
     assert client.calls == [("GET", "/admin/audit?limit=25", None)]
     assert json.loads(capsys.readouterr().out)["events"][0]["user_id"] == "alice"
+
+
+def test_cli_smoke_test_checks_health_datasets_schema_and_query(capsys):
+    client = FakeHTTPClient()
+
+    code = main(["smoke-test"], client=client)
+
+    assert code == 0
+    assert client.calls == [
+        ("GET", "/health", None),
+        ("GET", "/datasets", None),
+        ("GET", "/datasets/orders/schema", None),
+        ("POST", "/query", {"dataset": "orders", "select": ["order_id"], "limit": 1}),
+    ]
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["dataset"] == "orders"
+    assert payload["query_row_count"] == 1

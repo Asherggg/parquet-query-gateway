@@ -1,100 +1,138 @@
 # Parquet 查询网关安装指南
 
-以下步骤面向 AI Agent 和本地部署用户。部分步骤需要用户提供 GitHub 私有仓库访问权限、服务器路径和访问 token。
+这份指南面向要把 Parquet Query Gateway 发给其他用户安装的人。当前推荐路径是：公开仓库后，用户克隆仓库，运行安装脚本，脚本自动安装依赖、扫描数据目录、生成生产配置和 token。
 
-## 环境要求
+## 给 AI Agent 的安装任务
 
-开始安装前，请确认环境中已安装：
+把下面这段发给 AI Agent 即可：
 
-- Python 3.12+
+```text
+请帮我安装 Parquet Query Gateway。
+
+安装目标：
+- 仓库：https://github.com/guo1jing12/parquet-query-gateway.git
+- 数据目录：/home/ai_ds/sd_data_center
+- 部署方式：本机 Python 虚拟环境
+
+请按顺序执行：
+1. 检查 Python 3.11+、Git 是否可用。
+2. 克隆仓库并进入项目目录。
+3. 运行 bash scripts/install.sh --data-root /home/ai_ds/sd_data_center。
+4. 根据脚本输出启动 parquet-gateway。
+5. 使用脚本输出的 admin token 设置 PARQUET_GATEWAY_TOKEN。
+6. 运行 parquet-gw smoke-test。
+7. 如果安装了 OpenCLI，再运行 opencli parquet smoke-test。
+
+如果中途需要我提供 sudo 权限、开放端口、飞书应用凭证或确认覆盖 production.yml，请先暂停并说明原因。
+```
+
+发布前请确认仓库已设置为公开，或安装用户已拥有访问权限。
+
+## 前置条件
+
+服务器或本机需要：
+
+- Python 3.11+
 - Git
-- OpenCLI
-- GitHub CLI `gh`，用于访问私有仓库
-- Docker，可选，仅 Docker 部署需要
+- 可选：Node.js/npm，用于自动安装 OpenCLI
+- 可选：Docker，用于容器部署
 
-Parquet 文件默认放在服务器目录：
+如果要使用飞书登录，还需要提前准备飞书应用的 `app_id`、`app_secret`、回调地址和授权 URL。默认安装不依赖飞书，直接使用安装脚本生成的 bearer token。
+
+默认数据根目录：
 
 ```text
 /home/ai_ds/sd_data_center
 ```
 
-## 一键交给 AI Agent 安装
-
-把下面这段发给你的 AI Agent：
+数据目录结构推荐为：
 
 ```text
-帮我安装 Parquet 查询网关：
-
-1. 确认 GitHub CLI 已登录：
-   gh auth status
-
-2. 克隆私有仓库：
-   gh repo clone guo1jing12/parquet-query-gateway
-
-3. 进入项目并安装 Python 包：
-   cd parquet-query-gateway
-   python -m venv .venv
-   .\.venv\Scripts\Activate.ps1
-   pip install -e ".[dev]"
-
-4. 安装 OpenCLI 插件：
-   opencli plugin install file://$PWD
-
-5. 根据 README 创建 config/production.yml，并确认 Parquet 文件位于 /home/ai_ds/sd_data_center。
-
-6. 启动服务并验证：
-   $env:PARQUET_GATEWAY_CONFIG = "config/production.yml"
-   $env:PARQUET_GATEWAY_AUDIT_DB = "audit.sqlite3"
-   uvicorn parquet_gateway.app:create_app --factory --host 0.0.0.0 --port 8080
+/home/ai_ds/sd_data_center/
+  dataset_a/
+    part-000.parquet
+  dataset_b/
+    000000_0_2026-04
 ```
 
-如果在 Linux 服务器上安装，把第 3 步激活虚拟环境改为：
+每个子目录会被自动识别为一个 dataset。文件可以有 `.parquet` 后缀，也可以是无后缀 Parquet 文件。
+
+## 安装阶段
+
+公开仓库后，用户执行：
 
 ```bash
-source .venv/bin/activate
-```
-
-## 第 1 步 克隆私有仓库
-
-```bash
-gh auth status
-gh repo clone guo1jing12/parquet-query-gateway
+git clone https://github.com/guo1jing12/parquet-query-gateway.git
 cd parquet-query-gateway
+bash scripts/install.sh --data-root /home/ai_ds/sd_data_center
 ```
-
-如果 `gh auth status` 显示未登录，先执行：
-
-```bash
-gh auth login
-```
-
-## 第 2 步 安装 Python 服务
 
 Windows PowerShell：
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -e ".[dev]"
+git clone https://github.com/guo1jing12/parquet-query-gateway.git
+cd parquet-query-gateway
+.\scripts\install.ps1 -DataRoot "/home/ai_ds/sd_data_center"
 ```
 
-Linux：
+安装脚本会：
+
+1. 创建 `.venv`
+2. 安装 Python 包
+3. 运行 `parquet-gw init-config`
+4. 扫描数据根目录并生成 `config/production.yml`
+5. 自动生成 admin/analyst token
+6. 如本机有 npm，自动安装 OpenCLI 并注册 `parquet` 插件
+7. 输出启动命令和 smoke test 命令
+
+如果 `config/production.yml` 已存在，脚本会拒绝覆盖。确认要重建时使用：
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
+bash scripts/install.sh --data-root /home/ai_ds/sd_data_center --overwrite-config
 ```
 
-## 第 3 步 配置数据集和权限
+Windows：
 
-复制示例配置：
+```powershell
+.\scripts\install.ps1 -DataRoot "/home/ai_ds/sd_data_center" -OverwriteConfig
+```
+
+## 凭证阶段
+
+安装脚本会在终端输出两个静态 bearer token：
+
+- `admin_token`：可查询所有自动生成 dataset，并可查看审计和管理配置
+- `analyst_token`：可查询所有自动生成 dataset，但不能访问 admin API
+
+请把 token 保存到安全位置。默认安装不会把 token 写入 shell profile，也不会上传到远端服务。
+
+临时设置访问凭证：
 
 ```bash
-cp config/example.yml config/production.yml
+export PARQUET_GATEWAY_URL=http://127.0.0.1:8080
+export PARQUET_GATEWAY_TOKEN=<admin_token>
 ```
 
-编辑 `config/production.yml`：
+Windows PowerShell：
+
+```powershell
+$env:PARQUET_GATEWAY_URL = "http://127.0.0.1:8080"
+$env:PARQUET_GATEWAY_TOKEN = "<admin_token>"
+```
+
+如需给其他用户使用，请给他们分配 `analyst_token` 或在 `config/production.yml` 中新增用户和角色。
+
+## 自动生成生产配置
+
+也可以单独运行：
+
+```bash
+parquet-gw init-config \
+  --data-root /home/ai_ds/sd_data_center \
+  --output config/production.yml
+```
+
+它会生成类似配置：
 
 ```yaml
 settings:
@@ -102,213 +140,255 @@ settings:
   max_limit: 1000
   default_limit: 100
   query_timeout_seconds: 30
-
 users:
-  - id: alice
-    token: replace-with-secret-token
+  - id: admin
+    token: pgw-admin-...
+    roles: [admin]
+    attributes: {}
+  - id: analyst
+    token: pgw-analyst-...
     roles: [analyst]
-    attributes:
-      regions: [US, EU]
-
+    attributes: {}
 datasets:
-  orders:
-    description: Orders dataset
-    path: orders/*.parquet
+  gy_moojing_all_market_product_item:
+    description: gy_moojing_all_market_product_item
+    path: gy_moojing_all_market_product_item/*
     roles: [analyst, admin]
     columns:
-      analyst: [order_id, order_date, region, amount]
-      admin: [order_id, order_date, region, amount, margin, customer_email]
-    row_policy:
-      field: region
-      source: attributes.regions
-
+      analyst: [brand, category, sales_amount]
+      admin: [brand, category, sales_amount]
 auth:
-  gateway_token_secret: replace-with-long-random-secret
+  gateway_token_secret: ...
   token_ttl_seconds: 28800
-  feishu:
-    enabled: true
-    app_id: cli_xxx
-    app_secret: replace-with-feishu-app-secret
-    redirect_uri: http://127.0.0.1:8765/callback
-  feishu_users:
-    - open_id: ou_xxx
-      id: alice
-      roles: [analyst]
-      attributes:
-        regions: [US, EU]
 ```
 
-注意：
+默认生成的权限策略是：
 
-- `path` 必须是相对 `/home/ai_ds/sd_data_center` 的路径。
-- 不允许写绝对路径。
-- 不允许使用 `..` 跳出数据根目录。
-- 生产 token 请替换为高强度随机值。
+- `admin` 和 `analyst` 都能访问所有自动发现的 dataset
+- 两个角色默认可见所有字段
+- 不自动启用行级权限
 
-## 第 4 步 启动服务
+这是为了保证安装后立即可用。上线前如需精细权限，请编辑 `config/production.yml` 或打开 admin 配置页面调整字段权限、角色和 row policy。
+
+## 启动服务
+
+Linux/macOS：
+
+```bash
+source .venv/bin/activate
+export PARQUET_GATEWAY_CONFIG=config/production.yml
+export PARQUET_GATEWAY_AUDIT_DB=audit.sqlite3
+parquet-gateway
+```
 
 Windows PowerShell：
 
 ```powershell
 $env:PARQUET_GATEWAY_CONFIG = "config/production.yml"
 $env:PARQUET_GATEWAY_AUDIT_DB = "audit.sqlite3"
-uvicorn parquet_gateway.app:create_app --factory --host 0.0.0.0 --port 8080
+.\.venv\Scripts\parquet-gateway.exe
 ```
 
-Linux：
-
-```bash
-export PARQUET_GATEWAY_CONFIG=config/production.yml
-export PARQUET_GATEWAY_AUDIT_DB=audit.sqlite3
-uvicorn parquet_gateway.app:create_app --factory --host 0.0.0.0 --port 8080
-```
-
-## 第 5 步 安装 OpenCLI 插件
-
-在项目根目录执行：
-
-```bash
-opencli plugin install file://$PWD
-```
-
-Windows PowerShell 可使用绝对路径：
-
-```powershell
-opencli plugin install "file:///C:/Users/guojingjing01/Documents/opencli"
-```
-
-## 第 6 步 配置访问网关
-
-Windows PowerShell：
-
-```powershell
-$env:PARQUET_GATEWAY_URL = "http://127.0.0.1:8080"
-$env:PARQUET_GATEWAY_TOKEN = "replace-with-secret-token"
-```
-
-Linux：
-
-```bash
-export PARQUET_GATEWAY_URL=http://127.0.0.1:8080
-export PARQUET_GATEWAY_TOKEN=replace-with-secret-token
-```
-
-如果使用飞书登录，设置飞书授权 URL：
-
-```bash
-export PARQUET_FEISHU_AUTH_URL="https://open.feishu.cn/open-apis/authen/v1/authorize?..."
-```
-
-## 第 7 步 验证
-
-验证服务：
+健康检查：
 
 ```bash
 curl http://127.0.0.1:8080/health
 ```
 
-验证 OpenCLI 插件：
+## 验证阶段
+
+设置安装脚本输出的 admin token 后：
+
+```bash
+export PARQUET_GATEWAY_URL=http://127.0.0.1:8080
+export PARQUET_GATEWAY_TOKEN=pgw-admin-...
+```
+
+Windows PowerShell：
+
+```powershell
+$env:PARQUET_GATEWAY_URL = "http://127.0.0.1:8080"
+$env:PARQUET_GATEWAY_TOKEN = "pgw-admin-..."
+```
+
+运行 smoke test：
+
+```bash
+parquet-gw smoke-test
+```
+
+如果已安装 OpenCLI：
+
+```bash
+opencli parquet smoke-test
+opencli parquet datasets
+opencli parquet schema <dataset_id>
+opencli parquet query <dataset_id> --limit 5
+```
+
+## OpenCLI 插件
+
+安装脚本会尽量自动安装 OpenCLI。手动安装：
+
+```bash
+npm install -g @jackwener/opencli
+opencli plugin install "file://$PWD"
+```
+
+Windows PowerShell：
+
+```powershell
+npm.cmd install -g @jackwener/opencli
+opencli plugin install "file:///$((Get-Location).Path.Replace('\', '/'))"
+```
+
+常用命令：
 
 ```bash
 opencli parquet datasets
-opencli parquet login
-opencli parquet schema orders
-opencli parquet query orders --select order_id,region,amount --limit 10
-```
-
-管理员查看审计：
-
-```bash
+opencli parquet schema <dataset_id>
+opencli parquet query <dataset_id> --select col1,col2 --limit 10
 opencli parquet audit --limit 50
 ```
 
+PowerShell 中 `>` 可能被当作重定向。过滤条件建议用等值条件，或改在 CMD/bash 中执行范围条件。
+
 ## Docker 部署
 
-准备 `config/production.yml` 后执行：
+准备配置：
+
+```bash
+parquet-gw init-config --data-root /home/ai_ds/sd_data_center --output config/production.yml
+```
+
+启动：
 
 ```bash
 docker compose up --build -d
 ```
 
-`docker-compose.yml` 默认会把服务器目录挂载为只读：
+`docker-compose.yml` 默认会把数据根目录只读挂载到容器：
 
 ```text
 /home/ai_ds/sd_data_center:/home/ai_ds/sd_data_center:ro
 ```
 
-## 飞书授权说明
+## Systemd 部署
 
-飞书 OAuth 已接在 FastAPI 服务端：
+复制项目到 `/opt/parquet-query-gateway`，创建配置后：
 
-```text
-飞书登录
-  -> 服务端换取飞书用户身份
-  -> 服务端映射内部角色和属性
-  -> 服务端签发 PARQUET_GATEWAY_TOKEN
-  -> OpenCLI 插件携带 token 查询
+```bash
+sudo mkdir -p /var/lib/parquet-query-gateway
+sudo cp deploy/parquet-gateway.service /etc/systemd/system/parquet-gateway.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now parquet-gateway
+sudo systemctl status parquet-gateway
 ```
 
-不要把飞书 App Secret 放进 OpenCLI 插件或用户本机配置。
+如果安装位置不是 `/opt/parquet-query-gateway`，请先调整 service 文件里的 `WorkingDirectory`、`Environment` 和 `ExecStart`。
 
-当前版本的登录命令会自动打开浏览器并监听本机回调：
+## 飞书登录
+
+默认安装不要求飞书登录，直接使用生成的 bearer token。
+
+如果要启用飞书 OAuth：
+
+1. 编辑 `config/production.yml` 的 `auth.feishu`
+2. 配置 `app_id`、`app_secret`、`redirect_uri`
+3. 配置 `auth.feishu_users`
+4. 重启网关
+5. 设置授权 URL 并登录
 
 ```bash
 export PARQUET_FEISHU_AUTH_URL="https://open.feishu.cn/open-apis/authen/v1/authorize?..."
 opencli parquet login
 ```
 
-`login` 会监听：
-
-```text
-http://127.0.0.1:8765/callback
-```
-
-飞书回调成功后，命令会把 token 保存到：
+登录成功后会返回 `PARQUET_GATEWAY_TOKEN`，也会保存到：
 
 ```text
 ~/.parquet-gateway/token.json
 ```
 
-命令返回 `PARQUET_GATEWAY_TOKEN` 后，也可以手动将其设置为环境变量：
+如果浏览器不能自动打开，也可以手动获取授权码后执行：
 
 ```bash
-export PARQUET_GATEWAY_TOKEN=pgw.xxx
+opencli parquet login <feishu_authorization_code>
+```
+
+需要用户在浏览器中完成飞书授权时，AI Agent 应暂停并提示用户完成登录。
+
+## 更新和卸载
+
+更新代码：
+
+```bash
+git pull
+source .venv/bin/activate
+python -m pip install -e ".[dev]"
+opencli plugin update parquet
+```
+
+如果 OpenCLI 插件更新失败，可以重装：
+
+```bash
+opencli plugin uninstall parquet
+opencli plugin install "file://$PWD"
+```
+
+卸载本地插件：
+
+```bash
+opencli plugin uninstall parquet
+```
+
+停止 systemd 服务：
+
+```bash
+sudo systemctl disable --now parquet-gateway
 ```
 
 ## 常见问题
 
-### OpenCLI 找不到 `parquet` 命令
+### 没有发现任何 dataset
+
+确认：
+
+- `--data-root` 指向真实数据根目录
+- 数据根目录下是“每个 dataset 一个子目录”
+- 子目录里至少有一个可被 PyArrow 读取的 Parquet 文件
+
+### OpenCLI 找不到 parquet 命令
 
 重新安装插件：
 
 ```bash
-opencli plugin install file://$PWD
+opencli plugin install "file://$PWD"
+opencli parquet --help
 ```
 
-然后重新打开终端。
+### 查询返回 401
+
+确认 `PARQUET_GATEWAY_TOKEN` 是 `init-config` 或安装脚本输出的 token，不是示例占位符。
 
 ### 查询返回权限不足
 
-检查：
+检查 `config/production.yml`：
 
-- `PARQUET_GATEWAY_TOKEN` 是否正确。
-- 用户角色是否在 dataset 的 `roles` 中。
-- 请求字段是否在该角色的 `columns` 中。
-- 行级权限需要的用户属性是否存在。
+- 用户角色是否在 dataset 的 `roles` 中
+- 查询字段是否在该角色的 `columns` 中
+- 如果配置了 `row_policy`，用户属性是否包含允许值
 
-### 查询不到数据
+### 本机 health 正常，其他机器访问失败
 
-检查：
-
-- Parquet 文件是否在 `/home/ai_ds/sd_data_center` 下。
-- dataset `path` 是否为相对路径。
-- `row_policy` 是否过滤掉了全部数据。
-
-### 私有仓库无法克隆
-
-先登录 GitHub CLI：
+这通常是防火墙、端口映射、反向代理或内网策略问题。先在服务器本机验证：
 
 ```bash
-gh auth login
-gh auth status
+curl http://127.0.0.1:8080/health
+```
+
+再从客户端验证：
+
+```bash
+curl http://SERVER_HOST:8080/health
 ```
