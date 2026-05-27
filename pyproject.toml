@@ -1,0 +1,34 @@
+[project]
+name = "parquet-query-gateway"
+version = "0.1.0"
+description = "Permission-controlled HTTP gateway for querying server-local Parquet files."
+requires-python = ">=3.12"
+dependencies = [
+  "duckdb>=1.4.0",
+  "fastapi>=0.115.0",
+  "pydantic>=2.10.0",
+  "pyarrow>=18.0.0",
+  "pyyaml>=6.0.2",
+  "uvicorn[standard]>=0.32.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.28.0",
+  "pytest>=8.3.0",
+]
+
+[project.scripts]
+parquet-gateway = "parquet_gateway.main:main"
+parquet-gw = "parquet_gateway.cli:main"
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["parquet_gateway*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

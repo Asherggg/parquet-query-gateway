@@ -1,0 +1,29 @@
+settings:
+  data_root: /home/ai_ds/sd_data_center
+  max_limit: 1000
+  default_limit: 100
+  query_timeout_seconds: 30
+
+users:
+  - id: alice
+    token: analyst-token
+    roles: [analyst]
+    attributes:
+      regions: [US, EU]
+  - id: admin
+    token: admin-token
+    roles: [admin]
+    attributes:
+      regions: [US, EU, APAC]
+
+datasets:
+  orders:
+    description: Example order events
+    path: orders/*.parquet
+    roles: [analyst, admin]
+    columns:
+      analyst: [order_id, order_date, region, amount]
+      admin: [order_id, order_date, region, amount, margin, customer_email]
+    row_policy:
+      field: region
+      source: attributes.regions

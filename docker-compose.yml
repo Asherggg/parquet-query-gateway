@@ -1,0 +1,15 @@
+services:
+  parquet-gateway:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      PARQUET_GATEWAY_CONFIG: /app/config/production.yml
+      PARQUET_GATEWAY_AUDIT_DB: /app/state/audit.sqlite3
+    volumes:
+      - ./config/production.yml:/app/config/production.yml:ro
+      - /home/ai_ds/sd_data_center:/home/ai_ds/sd_data_center:ro
+      - parquet_gateway_state:/app/state
+
+volumes:
+  parquet_gateway_state:

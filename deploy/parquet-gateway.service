@@ -1,0 +1,17 @@
+[Unit]
+Description=Parquet Query Gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ai_ds
+WorkingDirectory=/opt/parquet-query-gateway
+Environment=PARQUET_GATEWAY_CONFIG=/opt/parquet-query-gateway/config/production.yml
+Environment=PARQUET_GATEWAY_AUDIT_DB=/var/lib/parquet-query-gateway/audit.sqlite3
+ExecStart=/opt/parquet-query-gateway/.venv/bin/uvicorn parquet_gateway.app:create_app --factory --host 0.0.0.0 --port 8080
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
