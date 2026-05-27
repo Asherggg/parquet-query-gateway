@@ -12,16 +12,22 @@ Parquet 文件统一放在：
 
 配置里的 dataset 路径必须是相对这个目录的路径，例如 `orders/*.parquet`。服务端会拒绝绝对路径和 `..` 越界路径。
 
-## 安装
+## 安装模式
 
-完整安装流程见：[Parquet 查询网关安装指南](docs/installation-guide.md)。
+如果你只是普通使用者，管理员已经部署好共享网关，请看：[客户端安装指南](docs/client-installation-guide.md)。
 
-公开仓库后推荐一键安装：
+如果你要部署新的共享网关，请看：[管理员部署指南](docs/installation-guide.md)。
+
+普通用户客户端安装**不会启动**新的 HTTP 服务，只安装 OpenCLI 插件并连接管理员提供的网关。
+
+## 客户端安装
+
+Linux/macOS：
 
 ```bash
 git clone https://github.com/guo1jing12/parquet-query-gateway.git
 cd parquet-query-gateway
-bash scripts/install.sh --data-root /home/ai_ds/sd_data_center
+bash scripts/client-install.sh --gateway-url http://intranet-184:8080
 ```
 
 Windows PowerShell：
@@ -29,8 +35,20 @@ Windows PowerShell：
 ```powershell
 git clone https://github.com/guo1jing12/parquet-query-gateway.git
 cd parquet-query-gateway
-.\scripts\install.ps1 -DataRoot "/home/ai_ds/sd_data_center"
+.\scripts\client-install.ps1 -GatewayUrl "http://intranet-184:8080"
 ```
+
+## 管理员部署
+
+管理员只需要部署一次共享网关：
+
+```bash
+git clone https://github.com/guo1jing12/parquet-query-gateway.git
+cd parquet-query-gateway
+bash scripts/install.sh --data-root /home/ai_ds/sd_data_center
+```
+
+## 开发安装
 
 手动开发安装：
 
@@ -40,7 +58,7 @@ python -m venv .venv
 pip install -e ".[dev]"
 ```
 
-## 启动服务
+## 管理员启动服务
 
 ```bash
 $env:PARQUET_GATEWAY_CONFIG = "config/example.yml"
@@ -48,7 +66,7 @@ $env:PARQUET_GATEWAY_AUDIT_DB = "audit.sqlite3"
 uvicorn parquet_gateway.app:create_app --factory --host 0.0.0.0 --port 8080
 ```
 
-## 生产配置
+## 管理员生产配置
 
 推荐自动扫描数据目录生成 `config/production.yml`：
 

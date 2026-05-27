@@ -57,3 +57,23 @@ def test_opencli_plugin_has_smoke_test_command():
     assert "/health" in source
     assert "/datasets" in source
     assert "/query" in source
+
+
+def test_client_install_scripts_do_not_start_or_configure_gateway():
+    for filename in ["client-install.sh", "client-install.ps1"]:
+        source = (ROOT / "scripts" / filename).read_text(encoding="utf-8")
+        assert "parquet-gateway" not in source
+        assert "init-config" not in source
+        assert "production.yml" not in source
+        assert "PARQUET_GATEWAY_CONFIG" not in source
+        assert "uvicorn" not in source
+
+
+def test_client_install_guide_is_client_only():
+    source = (ROOT / "docs" / "client-installation-guide.md").read_text(encoding="utf-8")
+
+    assert "不会启动" in source
+    assert "parquet-gateway" in source
+    assert "PARQUET_GATEWAY_URL" in source
+    assert "opencli parquet smoke-test" in source
+    assert "不要创建 production.yml" in source
