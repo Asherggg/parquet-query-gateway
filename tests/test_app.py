@@ -22,6 +22,29 @@ def test_health(monkeypatch, sample_gateway_config, tmp_path):
     assert response.json() == {"status": "ok"}
 
 
+def test_downloads_client_package(monkeypatch, sample_gateway_config, tmp_path):
+    package = tmp_path / "parquet-query-gateway-client.zip"
+    package.write_bytes(b"zip-bytes")
+    monkeypatch.setenv("PARQUET_GATEWAY_CLIENT_PACKAGE", str(package))
+    client = make_client(monkeypatch, sample_gateway_config, tmp_path)
+
+    response = client.get("/downloads/parquet-query-gateway-client.zip")
+
+    assert response.status_code == 200
+    assert response.content == b"zip-bytes"
+    assert response.headers["content-type"] == "application/zip"
+
+
+def test_downloads_client_package_returns_404_when_missing(monkeypatch, sample_gateway_config, tmp_path):
+    monkeypatch.setenv("PARQUET_GATEWAY_CLIENT_PACKAGE", str(tmp_path / "missing.zip"))
+    client = make_client(monkeypatch, sample_gateway_config, tmp_path)
+
+    response = client.get("/downloads/parquet-query-gateway-client.zip")
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "not_found"
+
+
 def test_datasets_requires_auth(monkeypatch, sample_gateway_config, tmp_path):
     client = make_client(monkeypatch, sample_gateway_config, tmp_path)
 

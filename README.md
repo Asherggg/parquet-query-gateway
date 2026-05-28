@@ -22,20 +22,13 @@ Parquet 文件统一放在：
 
 ## 客户端安装
 
-Linux/macOS：
-
-```bash
-git clone https://github.com/guo1jing12/parquet-query-gateway.git
-cd parquet-query-gateway
-bash scripts/client-install.sh --gateway-url http://192.168.58.184:8080
-```
-
 Windows PowerShell：
 
 ```powershell
-git clone https://github.com/guo1jing12/parquet-query-gateway.git
-cd parquet-query-gateway
-.\scripts\client-install.ps1 -GatewayUrl "http://192.168.58.184:8080"
+Invoke-WebRequest "http://192.168.58.184:8080/downloads/parquet-query-gateway-client.zip" -OutFile "$env:TEMP\parquet-client.zip"
+Expand-Archive "$env:TEMP\parquet-client.zip" "$env:TEMP\parquet-client" -Force
+cd "$env:TEMP\parquet-client"
+powershell -ExecutionPolicy Bypass -File .\scripts\client-install.ps1 -GatewayUrl "http://192.168.58.184:8080"
 ```
 
 ## 管理员部署

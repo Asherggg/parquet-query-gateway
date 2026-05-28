@@ -6,7 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel
 from pydantic import ValidationError
 
@@ -15,7 +15,7 @@ from parquet_gateway.admin_ui import ADMIN_CONFIG_UI_HTML
 from parquet_gateway.audit import AuditEvent, AuditLog
 from parquet_gateway.auth import Principal, TokenAuthenticator
 from parquet_gateway.config import GatewayConfig, load_config
-from parquet_gateway.errors import GatewayError
+from parquet_gateway.errors import GatewayError, NotFound
 from parquet_gateway.errors import PermissionDenied
 from parquet_gateway.executor import DuckDBExecutor
 from parquet_gateway.feishu import FeishuExchangeRequest, FeishuOAuthClient, exchange_feishu_code_for_gateway_token
@@ -26,6 +26,9 @@ from parquet_gateway.query_builder import compile_query
 
 class AdminConfigSaveRequest(BaseModel):
     yaml: str
+
+
+CLIENT_PACKAGE_NAME = "parquet-query-gateway-client.zip"
 
 
 def create_app(feishu_client=None) -> FastAPI:
@@ -59,6 +62,20 @@ def create_app(feishu_client=None) -> FastAPI:
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get(f"/downloads/{CLIENT_PACKAGE_NAME}")
+    def download_client_package() -> FileResponse:
+        package_path = Path(os.environ.get(
+            "PARQUET_GATEWAY_CLIENT_PACKAGE",
+            str(Path.cwd() / "downloads" / CLIENT_PACKAGE_NAME),
+        ))
+        if not package_path.is_file():
+            raise NotFound("client package is not available")
+        return FileResponse(
+            package_path,
+            media_type="application/zip",
+            filename=CLIENT_PACKAGE_NAME,
+        )
 
     @app.get("/datasets")
     def datasets(principal: Principal = Depends(current_principal)) -> dict[str, object]:
