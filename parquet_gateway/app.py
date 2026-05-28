@@ -90,7 +90,7 @@ def create_app(feishu_client=None) -> FastAPI:
             raise NotFound("client installation guide is not available")
         return FileResponse(
             guide_path,
-            media_type="text/markdown; charset=utf-8",
+            media_type="text/plain; charset=utf-8",
         )
 
     @app.get("/datasets")

@@ -54,7 +54,7 @@ def test_client_installation_guide_serves_markdown(monkeypatch, sample_gateway_c
     response = client.get("/client-installation-guide.md")
 
     assert response.status_code == 200
-    assert "text/markdown" in response.headers["content-type"]
+    assert "text/plain" in response.headers["content-type"]
     assert "charset=utf-8" in response.headers["content-type"]
     assert "attachment" not in response.headers.get("content-disposition", "")
     assert "Gateway: http://192.168.58.184:8080" in response.text
