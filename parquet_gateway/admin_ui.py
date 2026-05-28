@@ -521,6 +521,7 @@ ADMIN_CONFIG_UI_HTML = r"""<!doctype html>
         return obj.map((item) => " ".repeat(indent) + "- " + formatYamlValue(item, indent + 2)).join("\n");
       }
       if (obj && typeof obj === "object") {
+        if (!Object.keys(obj).length) return "{}";
         return Object.entries(obj).map(([key, value]) => {
           if (value && typeof value === "object") return " ".repeat(indent) + key + ":\n" + jsyamlDump(value, indent + 2);
           return " ".repeat(indent) + key + ": " + formatScalar(value);

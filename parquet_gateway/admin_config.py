@@ -48,6 +48,7 @@ def validate_admin_config_yaml(yaml_text: str, existing: dict[str, Any] | None =
         parsed = _load_yaml(yaml_text)
         if existing is not None:
             parsed = restore_redacted_secrets(parsed, existing)
+        parsed = normalize_empty_attributes(parsed)
         if not parsed.get("users"):
             raise ValueError("gateway config must define at least one user")
         if not parsed.get("datasets"):
@@ -55,6 +56,19 @@ def validate_admin_config_yaml(yaml_text: str, existing: dict[str, Any] | None =
         GatewayConfig.model_validate(parsed)
     except (yaml.YAMLError, ValidationError, ValueError) as exc:
         raise BadQuery(f"invalid gateway config: {exc}") from exc
+    return parsed
+
+
+def normalize_empty_attributes(parsed: dict[str, Any]) -> dict[str, Any]:
+    for user in parsed.get("users", []):
+        if isinstance(user, dict) and user.get("attributes") is None:
+            user["attributes"] = {}
+
+    auth = parsed.get("auth")
+    if isinstance(auth, dict):
+        for user in auth.get("feishu_users", []):
+            if isinstance(user, dict) and user.get("attributes") is None:
+                user["attributes"] = {}
     return parsed
 
 

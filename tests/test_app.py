@@ -359,6 +359,53 @@ def test_admin_config_ui_saves_with_post_to_avoid_put_blocks(monkeypatch, sample
     assert 'method: "PUT"' not in save_source
 
 
+def test_admin_config_ui_renders_empty_attributes_as_empty_mapping(monkeypatch, sample_gateway_config, tmp_path):
+    client = make_client(monkeypatch, sample_gateway_config, tmp_path)
+
+    response = client.get("/admin/config-ui")
+
+    assert response.status_code == 200
+    html = response.text
+    assert 'if (!Object.keys(obj).length) return "{}";' in html
+
+
+def test_admin_config_save_normalizes_empty_attributes(monkeypatch, sample_gateway_config, tmp_path):
+    client = make_client(monkeypatch, sample_gateway_config, tmp_path)
+    raw = yaml.safe_load(sample_gateway_config.read_text(encoding="utf-8"))
+    raw["auth"] = {
+        "gateway_token_secret": "gateway-secret",
+        "feishu": {
+            "enabled": True,
+            "app_id": "cli_test",
+            "app_secret": "feishu-secret",
+            "redirect_uri": "http://127.0.0.1:8765/callback",
+        },
+        "feishu_users": [
+            {
+                "name": "Alice",
+                "id": "alice-feishu",
+                "roles": ["analyst"],
+                "attributes": None,
+            }
+        ],
+    }
+    raw["users"][0]["attributes"] = None
+    raw["users"][1]["attributes"] = None
+
+    response = client.post(
+        "/admin/config",
+        headers={"Authorization": "Bearer admin-token"},
+        json={"yaml": yaml.safe_dump(raw)},
+    )
+
+    assert response.status_code == 200, response.json()
+    saved = yaml.safe_load(sample_gateway_config.read_text(encoding="utf-8"))
+    assert saved["auth"]["feishu_users"][0]["attributes"] == {}
+    assert saved["users"][0]["attributes"] == {}
+    assert saved["users"][1]["attributes"] == {}
+    reset_config_cache()
+
+
 def test_admin_can_discover_parquet_datasets(monkeypatch, sample_gateway_config, tmp_path):
     client = make_client(monkeypatch, sample_gateway_config, tmp_path)
 
