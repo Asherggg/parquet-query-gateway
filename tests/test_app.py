@@ -385,6 +385,22 @@ def test_admin_config_ui_removing_user_updates_yaml(monkeypatch, sample_gateway_
     assert "renderYaml();" in html
 
 
+def test_admin_config_ui_adding_user_updates_yaml(monkeypatch, sample_gateway_config, tmp_path):
+    client = make_client(monkeypatch, sample_gateway_config, tmp_path)
+
+    response = client.get("/admin/config-ui")
+
+    assert response.status_code == 200
+    html = response.text
+    assert '$("add-user").addEventListener("click", () => {' in html
+    add_start = html.index('$("add-user").addEventListener("click"')
+    add_end = html.index('$("sync-users").addEventListener("click"')
+    add_source = html[add_start:add_end]
+    assert "addUserCard" in add_source
+    assert "syncUsersFromForm();" in add_source
+    assert "renderYaml();" in add_source
+
+
 def test_admin_config_save_normalizes_empty_attributes(monkeypatch, sample_gateway_config, tmp_path):
     client = make_client(monkeypatch, sample_gateway_config, tmp_path)
     raw = yaml.safe_load(sample_gateway_config.read_text(encoding="utf-8"))

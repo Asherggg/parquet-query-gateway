@@ -218,7 +218,11 @@ ADMIN_CONFIG_UI_HTML = r"""<!doctype html>
     $("load").addEventListener("click", loadConfig);
     $("save").addEventListener("click", saveConfig);
     $("copy").addEventListener("click", async () => { await navigator.clipboard.writeText($("yaml").value); setStatus("已复制 YAML", "ok"); });
-    $("add-user").addEventListener("click", () => addUserCard({ roles: ["analyst"], attributes: {} }));
+    $("add-user").addEventListener("click", () => {
+      addUserCard({ roles: ["analyst"], attributes: {} });
+      syncUsersFromForm();
+      renderYaml();
+    });
     $("sync-users").addEventListener("click", () => { syncUsersFromForm(); renderYaml(); setStatus("用户已同步到 YAML", "ok"); });
     $("sync-settings").addEventListener("click", () => { syncSettingsFromForm(); renderYaml(); setStatus("基础配置已同步到 YAML", "ok"); });
     $("discover-datasets").addEventListener("click", discoverDatasets);
