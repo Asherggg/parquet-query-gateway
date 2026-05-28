@@ -10,3 +10,4 @@ sample-data/
 *.egg-info/
 .tmp/
 node_modules/
+output/
