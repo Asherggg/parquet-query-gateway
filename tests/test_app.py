@@ -372,6 +372,19 @@ def test_admin_config_ui_renders_empty_attributes_as_empty_mapping(monkeypatch, 
     assert 'return " ".repeat(indent) + key + ":\\n" + rendered;' in html
 
 
+def test_admin_config_ui_removing_user_updates_yaml(monkeypatch, sample_gateway_config, tmp_path):
+    client = make_client(monkeypatch, sample_gateway_config, tmp_path)
+
+    response = client.get("/admin/config-ui")
+
+    assert response.status_code == 200
+    html = response.text
+    assert 'node.querySelector(".remove-user").addEventListener("click", () => {' in html
+    assert "node.remove();" in html
+    assert "syncUsersFromForm();" in html
+    assert "renderYaml();" in html
+
+
 def test_admin_config_save_normalizes_empty_attributes(monkeypatch, sample_gateway_config, tmp_path):
     client = make_client(monkeypatch, sample_gateway_config, tmp_path)
     raw = yaml.safe_load(sample_gateway_config.read_text(encoding="utf-8"))

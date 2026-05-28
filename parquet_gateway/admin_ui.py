@@ -295,7 +295,11 @@ ADMIN_CONFIG_UI_HTML = r"""<!doctype html>
       node.querySelector(".user-attributes").value = JSON.stringify(user.attributes || {}, null, 2);
       const updateTitle = () => { node.querySelector(".user-title").textContent = node.querySelector(".user-id").value || node.querySelector(".user-name").value || node.querySelector(".user-open-id").value || "新用户"; };
       node.querySelectorAll("input,textarea").forEach((el) => el.addEventListener("input", updateTitle));
-      node.querySelector(".remove-user").addEventListener("click", () => node.remove());
+      node.querySelector(".remove-user").addEventListener("click", () => {
+        node.remove();
+        syncUsersFromForm();
+        renderYaml();
+      });
       updateTitle();
       $("users").appendChild(node);
     }
