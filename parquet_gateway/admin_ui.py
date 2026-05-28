@@ -533,6 +533,7 @@ ADMIN_CONFIG_UI_HTML = r"""<!doctype html>
     function formatYamlValue(value, indent) {
       if (value && typeof value === "object") {
         const rendered = jsyamlDump(value, indent);
+        if (rendered === "{}" || rendered === "[]") return rendered;
         return rendered.includes("\n") ? "\n" + rendered : rendered;
       }
       return formatScalar(value);
