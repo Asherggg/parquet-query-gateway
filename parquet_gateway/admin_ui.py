@@ -250,7 +250,7 @@ ADMIN_CONFIG_UI_HTML = r"""<!doctype html>
       setStatus("保存中...");
       try {
         const res = await fetch("/admin/config", {
-          method: "PUT",
+          method: "POST",
           headers: { ...authHeaders(), "Content-Type": "application/json" },
           body: JSON.stringify({ yaml: $("yaml").value }),
         });

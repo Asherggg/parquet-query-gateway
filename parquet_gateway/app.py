@@ -161,14 +161,16 @@ def create_app(feishu_client=None) -> FastAPI:
     def admin_config_ui() -> str:
         return ADMIN_CONFIG_UI_HTML
 
-    @app.put("/admin/config")
-    def save_admin_config(
+    def save_admin_config_impl(
         request: AdminConfigSaveRequest,
         _: Principal = Depends(current_admin),
     ) -> dict[str, object]:
         result = save_admin_config_yaml(config_path(), request.yaml)
         reset_config_cache()
         return result
+
+    app.put("/admin/config")(save_admin_config_impl)
+    app.post("/admin/config")(save_admin_config_impl)
 
     @app.post("/admin/config/reload")
     def reload_admin_config(_: Principal = Depends(current_admin)) -> dict[str, object]:

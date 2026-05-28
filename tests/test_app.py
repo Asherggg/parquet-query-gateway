@@ -233,6 +233,32 @@ def test_admin_can_validate_and_save_config(monkeypatch, sample_gateway_config, 
     reset_config_cache()
 
 
+def test_admin_can_save_config_with_post(monkeypatch, sample_gateway_config, tmp_path):
+    client = make_client(monkeypatch, sample_gateway_config, tmp_path)
+    raw = yaml.safe_load(sample_gateway_config.read_text(encoding="utf-8"))
+    raw["auth"] = {
+        "gateway_token_secret": "new-gateway-secret",
+        "feishu": {
+            "enabled": True,
+            "app_id": "cli_post_save",
+            "app_secret": "new-feishu-secret",
+            "redirect_uri": "http://127.0.0.1:8765/callback",
+        },
+        "feishu_users": [],
+    }
+
+    response = client.post(
+        "/admin/config",
+        headers={"Authorization": "Bearer admin-token"},
+        json={"yaml": yaml.safe_dump(raw)},
+    )
+
+    assert response.status_code == 200, response.json()
+    saved = yaml.safe_load(sample_gateway_config.read_text(encoding="utf-8"))
+    assert saved["auth"]["feishu"]["app_id"] == "cli_post_save"
+    reset_config_cache()
+
+
 def test_admin_config_save_preserves_redacted_secrets(monkeypatch, sample_gateway_config, tmp_path):
     raw = yaml.safe_load(sample_gateway_config.read_text(encoding="utf-8"))
     raw["auth"] = {
@@ -317,6 +343,20 @@ def test_admin_config_ui_save_handles_request_failures(monkeypatch, sample_gatew
     assert "catch (err)" in save_source
     assert "保存失败" in save_source
     assert "finally" in save_source
+
+
+def test_admin_config_ui_saves_with_post_to_avoid_put_blocks(monkeypatch, sample_gateway_config, tmp_path):
+    client = make_client(monkeypatch, sample_gateway_config, tmp_path)
+
+    response = client.get("/admin/config-ui")
+
+    assert response.status_code == 200
+    html = response.text
+    save_start = html.index("async function saveConfig")
+    save_end = html.index("function renderAll")
+    save_source = html[save_start:save_end]
+    assert 'method: "POST"' in save_source
+    assert 'method: "PUT"' not in save_source
 
 
 def test_admin_can_discover_parquet_datasets(monkeypatch, sample_gateway_config, tmp_path):
