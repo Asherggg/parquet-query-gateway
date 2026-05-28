@@ -195,6 +195,17 @@ ADMIN_CONFIG_UI_HTML = r"""<!doctype html>
     const authHeaders = () => token() ? { Authorization: "Bearer " + token() } : {};
     const splitList = (value) => value.split(",").map((v) => v.trim()).filter(Boolean);
     const dump = (obj) => jsyamlDump(obj);
+    const errorMessage = (err, fallback) => err?.message ? `${fallback}: ${err.message}` : fallback;
+
+    async function readJsonResponse(res) {
+      const text = await res.text();
+      if (!text) return {};
+      try {
+        return JSON.parse(text);
+      } catch {
+        throw new Error(`服务器返回了非 JSON 响应，HTTP ${res.status}`);
+      }
+    }
 
     document.querySelectorAll(".tab").forEach((tab) => {
       tab.addEventListener("click", () => {
@@ -219,27 +230,39 @@ ADMIN_CONFIG_UI_HTML = r"""<!doctype html>
     async function loadConfig() {
       if (!token()) { setStatus("请输入 admin token", "err"); return; }
       setStatus("加载中...");
-      const res = await fetch("/admin/config", { headers: authHeaders() });
-      const body = await res.json();
-      if (!res.ok) { setStatus(body.error?.message || "加载失败", "err"); return; }
-      config = body.config;
-      $("path").textContent = body.path;
-      renderAll();
-      setStatus("已加载", "ok");
+      try {
+        const res = await fetch("/admin/config", { headers: authHeaders() });
+        const body = await readJsonResponse(res);
+        if (!res.ok) { setStatus(body.error?.message || "加载失败", "err"); return; }
+        config = body.config;
+        $("path").textContent = body.path;
+        renderAll();
+        setStatus("已加载", "ok");
+      } catch (err) {
+        setStatus(errorMessage(err, "加载失败"), "err");
+      }
     }
 
     async function saveConfig() {
       if (!token()) { setStatus("请输入 admin token", "err"); return; }
+      const saveButton = $("save");
+      saveButton.disabled = true;
       setStatus("保存中...");
-      const res = await fetch("/admin/config", {
-        method: "PUT",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ yaml: $("yaml").value }),
-      });
-      const body = await res.json();
-      if (!res.ok) { setStatus(body.error?.message || "保存失败", "err"); return; }
-      setStatus("已保存，备份 " + body.backup_path, "ok");
-      await loadConfig();
+      try {
+        const res = await fetch("/admin/config", {
+          method: "PUT",
+          headers: { ...authHeaders(), "Content-Type": "application/json" },
+          body: JSON.stringify({ yaml: $("yaml").value }),
+        });
+        const body = await readJsonResponse(res);
+        if (!res.ok) { setStatus(body.error?.message || "保存失败", "err"); return; }
+        setStatus("已保存，备份 " + body.backup_path, "ok");
+        await loadConfig();
+      } catch (err) {
+        setStatus(errorMessage(err, "保存失败"), "err");
+      } finally {
+        saveButton.disabled = false;
+      }
     }
 
     function renderAll() {
@@ -406,11 +429,15 @@ ADMIN_CONFIG_UI_HTML = r"""<!doctype html>
     async function discoverDatasets() {
       if (!token()) { setStatus("请输入 admin token", "err"); return; }
       setStatus("扫描中...");
-      const res = await fetch("/admin/config/discover-datasets", { headers: authHeaders() });
-      const body = await res.json();
-      if (!res.ok) { setStatus(body.error?.message || "扫描失败", "err"); return; }
-      renderDiscoveredDatasets(body.datasets || []);
-      setStatus(`发现 ${(body.datasets || []).length} 张数据表`, "ok");
+      try {
+        const res = await fetch("/admin/config/discover-datasets", { headers: authHeaders() });
+        const body = await readJsonResponse(res);
+        if (!res.ok) { setStatus(body.error?.message || "扫描失败", "err"); return; }
+        renderDiscoveredDatasets(body.datasets || []);
+        setStatus(`发现 ${(body.datasets || []).length} 张数据表`, "ok");
+      } catch (err) {
+        setStatus(errorMessage(err, "扫描失败"), "err");
+      }
     }
 
     function renderDiscoveredDatasets(datasets) {

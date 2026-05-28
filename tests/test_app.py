@@ -302,6 +302,23 @@ def test_admin_config_ui_serves_html(monkeypatch, sample_gateway_config, tmp_pat
     assert "hr" in response.text
 
 
+def test_admin_config_ui_save_handles_request_failures(monkeypatch, sample_gateway_config, tmp_path):
+    client = make_client(monkeypatch, sample_gateway_config, tmp_path)
+
+    response = client.get("/admin/config-ui")
+
+    assert response.status_code == 200
+    html = response.text
+    assert "async function readJsonResponse" in html
+    save_start = html.index("async function saveConfig")
+    save_end = html.index("function renderAll")
+    save_source = html[save_start:save_end]
+    assert "try {" in save_source
+    assert "catch (err)" in save_source
+    assert "保存失败" in save_source
+    assert "finally" in save_source
+
+
 def test_admin_can_discover_parquet_datasets(monkeypatch, sample_gateway_config, tmp_path):
     client = make_client(monkeypatch, sample_gateway_config, tmp_path)
 
