@@ -64,6 +64,7 @@ def create_app(feishu_client=None) -> FastAPI:
         return {"status": "ok"}
 
     @app.get(f"/downloads/{CLIENT_PACKAGE_NAME}")
+    @app.head(f"/downloads/{CLIENT_PACKAGE_NAME}")
     def download_client_package() -> FileResponse:
         package_path = Path(os.environ.get(
             "PARQUET_GATEWAY_CLIENT_PACKAGE",
