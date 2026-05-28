@@ -29,6 +29,7 @@ class AdminConfigSaveRequest(BaseModel):
 
 
 CLIENT_PACKAGE_NAME = "parquet-query-gateway-client.zip"
+CLIENT_GUIDE_NAME = "client-installation-guide.md"
 
 
 def create_app(feishu_client=None) -> FastAPI:
@@ -76,6 +77,20 @@ def create_app(feishu_client=None) -> FastAPI:
             package_path,
             media_type="application/zip",
             filename=CLIENT_PACKAGE_NAME,
+        )
+
+    @app.get(f"/{CLIENT_GUIDE_NAME}")
+    @app.head(f"/{CLIENT_GUIDE_NAME}")
+    def client_installation_guide() -> FileResponse:
+        guide_path = Path(os.environ.get(
+            "PARQUET_GATEWAY_CLIENT_GUIDE",
+            str(Path.cwd() / "docs" / CLIENT_GUIDE_NAME),
+        ))
+        if not guide_path.is_file():
+            raise NotFound("client installation guide is not available")
+        return FileResponse(
+            guide_path,
+            media_type="text/markdown; charset=utf-8",
         )
 
     @app.get("/datasets")

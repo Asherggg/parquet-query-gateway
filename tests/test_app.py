@@ -45,6 +45,21 @@ def test_downloads_client_package_returns_404_when_missing(monkeypatch, sample_g
     assert response.json()["error"]["code"] == "not_found"
 
 
+def test_client_installation_guide_serves_markdown(monkeypatch, sample_gateway_config, tmp_path):
+    guide = tmp_path / "client-installation-guide.md"
+    guide.write_text("# Client Guide\n\nGateway: http://192.168.58.184:8080\n", encoding="utf-8")
+    monkeypatch.setenv("PARQUET_GATEWAY_CLIENT_GUIDE", str(guide))
+    client = make_client(monkeypatch, sample_gateway_config, tmp_path)
+
+    response = client.get("/client-installation-guide.md")
+
+    assert response.status_code == 200
+    assert "text/markdown" in response.headers["content-type"]
+    assert "charset=utf-8" in response.headers["content-type"]
+    assert "attachment" not in response.headers.get("content-disposition", "")
+    assert "Gateway: http://192.168.58.184:8080" in response.text
+
+
 def test_datasets_requires_auth(monkeypatch, sample_gateway_config, tmp_path):
     client = make_client(monkeypatch, sample_gateway_config, tmp_path)
 
