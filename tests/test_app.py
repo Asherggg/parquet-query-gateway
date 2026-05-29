@@ -62,6 +62,41 @@ def test_client_installation_guide_serves_markdown(monkeypatch, sample_gateway_c
     assert "Gateway: http://192.168.58.184:8080" in response.text
 
 
+def test_client_version_endpoint_returns_update_metadata(monkeypatch, sample_gateway_config, tmp_path):
+    client = make_client(monkeypatch, sample_gateway_config, tmp_path)
+
+    response = client.get("/client/version")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "client_version": "0.1.1",
+        "latest_version": "0.1.1",
+        "download_url": "/downloads/parquet-query-gateway-client.zip",
+        "guide_url": "/client-installation-guide.md",
+    }
+
+
+def test_response_marks_outdated_client_version(monkeypatch, sample_gateway_config, tmp_path):
+    client = make_client(monkeypatch, sample_gateway_config, tmp_path)
+
+    response = client.get("/health", headers={"X-Parquet-Client-Version": "0.0.1"})
+
+    assert response.status_code == 200
+    assert response.headers["X-Parquet-Client-Version-Status"] == "outdated"
+    assert response.headers["X-Parquet-Client-Latest-Version"] == "0.1.1"
+    assert response.headers["X-Parquet-Client-Download-Url"] == "/downloads/parquet-query-gateway-client.zip"
+
+
+def test_response_marks_missing_client_version_as_outdated(monkeypatch, sample_gateway_config, tmp_path):
+    client = make_client(monkeypatch, sample_gateway_config, tmp_path)
+
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.headers["X-Parquet-Client-Version-Status"] == "outdated"
+    assert response.headers["X-Parquet-Client-Latest-Version"] == "0.1.1"
+
+
 def test_datasets_requires_auth(monkeypatch, sample_gateway_config, tmp_path):
     client = make_client(monkeypatch, sample_gateway_config, tmp_path)
 

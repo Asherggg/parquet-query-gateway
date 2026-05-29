@@ -14,6 +14,19 @@ def test_opencli_plugin_manifest_exists():
     assert manifest["opencli"] == ">=1.0.0"
 
 
+def test_client_version_is_consistent_across_package_surfaces():
+    manifest = json.loads((ROOT / "opencli-plugin.json").read_text(encoding="utf-8"))
+    client_source = (ROOT / "gateway-client.js").read_text(encoding="utf-8")
+    app_source = (ROOT / "parquet_gateway" / "app.py").read_text(encoding="utf-8")
+    package_script = (ROOT / "scripts" / "package-client.ps1").read_text(encoding="utf-8")
+
+    version = manifest["version"]
+    assert f"CLIENT_VERSION = '{version}'" in client_source
+    assert f'CLIENT_VERSION = "{version}"' in app_source
+    assert '"Client version:",' in package_script
+    assert "$clientVersion = $manifest.version" in package_script
+
+
 def test_opencli_plugin_commands_register_parquet_site():
     for filename in ["datasets.js", "schema.js", "query.js", "audit.js", "login.js", "smoke-test.js"]:
         source = (ROOT / filename).read_text(encoding="utf-8")

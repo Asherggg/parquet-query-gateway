@@ -9,6 +9,8 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $packageName = "parquet-query-gateway-client"
 $staging = Join-Path $root "$OutputDir\$packageName"
 $zipPath = Join-Path $root "$OutputDir\$packageName.zip"
+$manifest = Get-Content -Raw -Path (Join-Path $root "opencli-plugin.json") | ConvertFrom-Json
+$clientVersion = $manifest.version
 
 if (Test-Path $staging) {
     Remove-Item -Recurse -Force $staging
@@ -40,6 +42,10 @@ foreach ($file in $files) {
 
 $readme = @(
     "# Parquet Query Gateway Client",
+    "",
+    "Client version:",
+    "",
+    $clientVersion,
     "",
     "Gateway URL:",
     "",

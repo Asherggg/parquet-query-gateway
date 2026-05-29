@@ -1,5 +1,7 @@
 import { loginWithFeishu, readSavedGatewayToken } from './auth-flow.js';
 
+export const CLIENT_VERSION = '0.1.1';
+
 export function gatewayBaseUrl() {
   return (process.env.PARQUET_GATEWAY_URL || 'http://127.0.0.1:8080').replace(/\/+$/, '');
 }
@@ -25,6 +27,7 @@ export async function gatewayRequest(path, options = {}) {
   const headers = {
     Accept: 'application/json',
     'Content-Type': 'application/json',
+    'X-Parquet-Client-Version': CLIENT_VERSION,
   };
   if (options.auth !== false) {
     headers.Authorization = `Bearer ${await gatewayToken()}`;
@@ -40,7 +43,23 @@ export async function gatewayRequest(path, options = {}) {
     const message = payload?.error?.message || payload?.detail || response.statusText;
     throw new Error(`Gateway HTTP ${response.status}: ${message}`);
   }
+  warnIfClientOutdated(response);
   return payload;
+}
+
+function warnIfClientOutdated(response) {
+  if (response.headers?.get('X-Parquet-Client-Version-Status') !== 'outdated') return;
+  const latestVersion = response.headers.get('X-Parquet-Client-Latest-Version') || 'unknown';
+  const downloadUrl = absoluteGatewayUrl(response.headers.get('X-Parquet-Client-Download-Url'));
+  const guideUrl = absoluteGatewayUrl(response.headers.get('X-Parquet-Client-Guide-Url'));
+  const guideSuffix = guideUrl ? ` (guide: ${guideUrl})` : '';
+  const updateTarget = downloadUrl || 'ask your gateway administrator for the latest client package';
+  console.error(`Parquet Gateway client ${CLIENT_VERSION} is older than server latest ${latestVersion}. Update: ${updateTarget}${guideSuffix}`);
+}
+
+function absoluteGatewayUrl(pathOrUrl) {
+  if (!pathOrUrl) return '';
+  return new URL(pathOrUrl, `${gatewayBaseUrl()}/`).toString();
 }
 
 export function splitCsv(value) {

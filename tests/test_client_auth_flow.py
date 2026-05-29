@@ -58,6 +58,49 @@ def test_auth_flow_discovers_feishu_authorize_url_from_gateway():
     )
 
 
+def test_gateway_request_sends_client_version_and_warns_on_outdated_response():
+    output = run_node("""
+        const calls = [];
+        const warnings = [];
+        process.env.PARQUET_GATEWAY_URL = 'http://gateway.example';
+        process.env.PARQUET_GATEWAY_TOKEN = 'token';
+        console.error = (message) => warnings.push(message);
+        globalThis.fetch = async (url, options) => {
+          calls.push({
+            url: String(url),
+            version: options.headers['X-Parquet-Client-Version'],
+          });
+          return {
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            headers: {
+              get: (name) => ({
+                'X-Parquet-Client-Version-Status': 'outdated',
+                'X-Parquet-Client-Latest-Version': '0.2.0',
+                'X-Parquet-Client-Download-Url': '/downloads/parquet-query-gateway-client.zip',
+                'X-Parquet-Client-Guide-Url': '/client-installation-guide.md',
+              }[name] || null),
+            },
+            text: async () => JSON.stringify({ status: 'ok' }),
+          };
+        };
+        const client = await import('./gateway-client.js');
+        const payload = await client.gatewayRequest('/health', { auth: false });
+        console.log(JSON.stringify({ payload, calls, warnings }));
+    """)
+
+    payload = json.loads(output)
+    assert payload["payload"] == {"status": "ok"}
+    assert payload["calls"][0] == {
+        "url": "http://gateway.example/health",
+        "version": "0.1.1",
+    }
+    assert payload["warnings"] == [
+        "Parquet Gateway client 0.1.1 is older than server latest 0.2.0. Update: http://gateway.example/downloads/parquet-query-gateway-client.zip (guide: http://gateway.example/client-installation-guide.md)"
+    ]
+
+
 def test_windows_browser_open_avoids_cmd_ampersand_truncation():
     source = open("auth-flow.js", encoding="utf-8").read()
 

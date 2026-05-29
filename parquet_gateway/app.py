@@ -5,7 +5,7 @@ import time
 from functools import lru_cache
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Header
+from fastapi import Depends, FastAPI, Header, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel
 from pydantic import ValidationError
@@ -35,6 +35,9 @@ class AdminConfigSaveRequest(BaseModel):
 
 CLIENT_PACKAGE_NAME = "parquet-query-gateway-client.zip"
 CLIENT_GUIDE_NAME = "client-installation-guide.md"
+CLIENT_VERSION = "0.1.1"
+CLIENT_DOWNLOAD_URL = f"/downloads/{CLIENT_PACKAGE_NAME}"
+CLIENT_GUIDE_URL = f"/{CLIENT_GUIDE_NAME}"
 
 
 def create_app(feishu_client=None) -> FastAPI:
@@ -45,6 +48,17 @@ def create_app(feishu_client=None) -> FastAPI:
     actual_feishu_client = feishu_client or FeishuOAuthClient(config)
 
     app = FastAPI(title="Parquet Query Gateway", version="0.1.0")
+
+    @app.middleware("http")
+    async def client_version_middleware(request: Request, call_next) -> Response:
+        response = await call_next(request)
+        client_version = request.headers.get("x-parquet-client-version")
+        if not client_version or client_version != CLIENT_VERSION:
+            response.headers["X-Parquet-Client-Version-Status"] = "outdated"
+            response.headers["X-Parquet-Client-Latest-Version"] = CLIENT_VERSION
+            response.headers["X-Parquet-Client-Download-Url"] = CLIENT_DOWNLOAD_URL
+            response.headers["X-Parquet-Client-Guide-Url"] = CLIENT_GUIDE_URL
+        return response
 
     def current_principal(authorization: str | None = Header(default=None)) -> Principal:
         return authenticator.authenticate_header(authorization)
@@ -68,6 +82,15 @@ def create_app(feishu_client=None) -> FastAPI:
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/client/version")
+    def client_version() -> dict[str, str]:
+        return {
+            "client_version": CLIENT_VERSION,
+            "latest_version": CLIENT_VERSION,
+            "download_url": CLIENT_DOWNLOAD_URL,
+            "guide_url": CLIENT_GUIDE_URL,
+        }
 
     @app.get(f"/downloads/{CLIENT_PACKAGE_NAME}")
     @app.head(f"/downloads/{CLIENT_PACKAGE_NAME}")
