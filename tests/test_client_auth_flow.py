@@ -113,6 +113,8 @@ def test_auth_flow_uses_gateway_hosted_login_session(tmp_path):
         {"url": "http://gateway.example/auth/feishu/login-session/login-session-1", "method": "GET"},
     ]
     assert any("copy this authorization URL" in warning for warning in payload["warnings"])
+    assert any("Trying to open your default browser" in warning for warning in payload["warnings"])
+    assert any("If no browser opens within 5 seconds" in warning for warning in payload["warnings"])
 
 
 def test_gateway_hosted_login_error_includes_unmapped_user_details():
@@ -163,6 +165,76 @@ def test_gateway_hosted_login_error_includes_unmapped_user_details():
     assert "email" not in output
 
 
+def test_completed_gateway_login_session_can_be_saved_after_browser_callback(tmp_path):
+    token_path = tmp_path / "token.json"
+    output = run_node(f"""
+        const calls = [];
+        globalThis.fetch = async (url) => {{
+          calls.push(String(url));
+          return {{
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            text: async () => JSON.stringify({{
+              status: 'complete',
+              access_token: 'recovered-token',
+              token_type: 'bearer',
+              expires_in: 28800,
+              user: {{ name: 'Alice Zhang' }},
+            }}),
+          }};
+        }};
+        const auth = await import('./auth-flow.js');
+        const payload = await auth.completeGatewayLoginSession({{
+          gatewayUrl: 'http://gateway.example',
+          sessionId: 'login-session-1',
+          savePath: {json.dumps(str(token_path))},
+        }});
+        const saved = await auth.readSavedGatewayToken({json.dumps(str(token_path))});
+        console.log(JSON.stringify({{ payload, saved, calls }}));
+    """)
+
+    payload = json.loads(output)
+    assert payload["payload"]["access_token"] == "recovered-token"
+    assert payload["saved"] == "recovered-token"
+    assert payload["calls"] == ["http://gateway.example/auth/feishu/login-session/login-session-1"]
+
+
+def test_callback_url_state_can_recover_completed_gateway_login_session(tmp_path):
+    token_path = tmp_path / "token.json"
+    callback_url = (
+        "http://gateway.example/auth/feishu/callback?"
+        "code=auth-code&state=login-session-1"
+    )
+    output = run_node(f"""
+        globalThis.fetch = async (url) => {{
+          return {{
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            text: async () => JSON.stringify({{
+              status: 'complete',
+              access_token: 'callback-recovered-token',
+              token_type: 'bearer',
+              expires_in: 28800,
+            }}),
+          }};
+        }};
+        const auth = await import('./auth-flow.js');
+        const payload = await auth.completeGatewayLoginFromCallbackUrl({{
+          gatewayUrl: 'http://gateway.example',
+          callbackUrl: {json.dumps(callback_url)},
+          savePath: {json.dumps(str(token_path))},
+        }});
+        const saved = await auth.readSavedGatewayToken({json.dumps(str(token_path))});
+        console.log(JSON.stringify({{ payload, saved }}));
+    """)
+
+    payload = json.loads(output)
+    assert payload["payload"]["access_token"] == "callback-recovered-token"
+    assert payload["saved"] == "callback-recovered-token"
+
+
 def test_gateway_request_sends_client_version_and_warns_on_outdated_response():
     output = run_node("""
         const calls = [];
@@ -199,10 +271,10 @@ def test_gateway_request_sends_client_version_and_warns_on_outdated_response():
     assert payload["payload"] == {"status": "ok"}
     assert payload["calls"][0] == {
         "url": "http://gateway.example/health",
-        "version": "0.1.4",
+        "version": "0.1.6",
     }
     assert payload["warnings"] == [
-        "Parquet Gateway client 0.1.4 is older than server latest 0.2.0. Update: http://gateway.example/downloads/parquet-query-gateway-client.zip (guide: http://gateway.example/client-installation-guide.md)"
+        "Parquet Gateway client 0.1.6 is older than server latest 0.2.0. Update: http://gateway.example/downloads/parquet-query-gateway-client.zip (guide: http://gateway.example/client-installation-guide.md)"
     ]
 
 
@@ -220,6 +292,8 @@ def test_login_prints_authorization_url_as_fallback():
     source = open("auth-flow.js", encoding="utf-8").read()
 
     assert "copy this authorization URL into your browser" in source
+    assert "Trying to open your default browser" in source
+    assert "If no browser opens within 5 seconds" in source
     assert "the browser should return to" in source
     assert "opencli parquet login \"<code>\"" in source
     assert "console.error" in source

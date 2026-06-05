@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+import subprocess
 from urllib.parse import parse_qs, urlparse
 
 import yaml
@@ -69,8 +71,8 @@ def test_client_version_endpoint_returns_update_metadata(monkeypatch, sample_gat
 
     assert response.status_code == 200
     assert response.json() == {
-        "client_version": "0.1.4",
-        "latest_version": "0.1.4",
+        "client_version": "0.1.6",
+        "latest_version": "0.1.6",
         "download_url": "/downloads/parquet-query-gateway-client.zip",
         "guide_url": "/client-installation-guide.md",
     }
@@ -83,7 +85,7 @@ def test_response_marks_outdated_client_version(monkeypatch, sample_gateway_conf
 
     assert response.status_code == 200
     assert response.headers["X-Parquet-Client-Version-Status"] == "outdated"
-    assert response.headers["X-Parquet-Client-Latest-Version"] == "0.1.4"
+    assert response.headers["X-Parquet-Client-Latest-Version"] == "0.1.6"
     assert response.headers["X-Parquet-Client-Download-Url"] == "/downloads/parquet-query-gateway-client.zip"
 
 
@@ -94,7 +96,7 @@ def test_response_marks_missing_client_version_as_outdated(monkeypatch, sample_g
 
     assert response.status_code == 200
     assert response.headers["X-Parquet-Client-Version-Status"] == "outdated"
-    assert response.headers["X-Parquet-Client-Latest-Version"] == "0.1.4"
+    assert response.headers["X-Parquet-Client-Latest-Version"] == "0.1.6"
 
 
 def test_datasets_requires_auth(monkeypatch, sample_gateway_config, tmp_path):
@@ -451,6 +453,165 @@ def test_admin_config_ui_user_field_changes_update_yaml(monkeypatch, sample_gate
     assert "renderRoleDropdown(node.querySelector(\".user-roles\"), user.roles || [], syncUserCard);" in html
     assert "function renderRoleDropdown(container, selected, onChange)" in html
     assert "if (onChange) onChange();" in html
+
+
+def test_admin_config_ui_can_approve_pending_feishu_users(monkeypatch, sample_gateway_config, tmp_path):
+    client = make_client(monkeypatch, sample_gateway_config, tmp_path)
+
+    response = client.get("/admin/config-ui")
+
+    assert response.status_code == 200
+    html = response.text
+    assert 'id="pending-users"' in html
+    assert "pending-card" in html
+    assert "function renderPendingUsers()" in html
+    assert "function approvePendingUser(index)" in html
+    assert "config.auth.pending_feishu_users.splice(index, 1);" in html
+    assert "syncUsersFromForm();" in html
+    assert "renderYaml();" in html
+
+
+def test_admin_config_ui_has_permission_workspace(monkeypatch, sample_gateway_config, tmp_path):
+    client = make_client(monkeypatch, sample_gateway_config, tmp_path)
+
+    response = client.get("/admin/config-ui")
+
+    assert response.status_code == 200
+    html = response.text
+    assert 'data-tab="users"' in html
+    assert 'data-tab="pending"' in html
+    assert 'data-tab="advanced-yaml"' in html
+    assert 'id="apply-yaml"' in html
+    assert "function applyYamlToForm()" in html
+    assert "parseSimpleYaml" in html
+    assert "parseYamlBlock" in html
+    assert "renderFieldPermissionMatrix" in html
+    assert "renderRowPolicyEditor" in html
+    assert "validateBeforeSave" in html
+    assert "权限模拟器" not in html
+
+
+def test_admin_config_ui_matrix_replaces_dataset_column_textareas(monkeypatch, sample_gateway_config, tmp_path):
+    client = make_client(monkeypatch, sample_gateway_config, tmp_path)
+
+    response = client.get("/admin/config-ui")
+
+    assert response.status_code == 200
+    html = response.text
+    assert "field-permission-matrix" in html
+    assert "matrix-cell" in html
+    assert "field-toggle" in html
+    assert "role-toggle" in html
+    assert "toggleVisibleField" in html
+    assert "toggleVisibleRole" in html
+    assert "quick-copy-target" in html
+    assert "select-visible-fields" in html
+    assert "clear-visible-fields" in html
+    assert "dataset-columns" not in html
+
+
+def test_admin_config_ui_collapses_dataset_cards(monkeypatch, sample_gateway_config, tmp_path):
+    client = make_client(monkeypatch, sample_gateway_config, tmp_path)
+
+    response = client.get("/admin/config-ui")
+
+    assert response.status_code == 200
+    html = response.text
+    assert 'dataset-card ${expandedDatasetIds.has(id) ? "" : "collapsed"}' in html
+    assert "permission-card" in html
+    assert "权限配置工作区" in html
+    assert "权限配置" in html
+    assert "row_policy" in html
+    assert "dataset-body" in html
+    assert "toggleDatasetCard" in html
+    assert "expand-all-datasets" in html
+    assert "collapse-all-datasets" in html
+
+
+def test_admin_config_ui_preserves_dataset_expansion_when_roles_change(monkeypatch, sample_gateway_config, tmp_path):
+    client = make_client(monkeypatch, sample_gateway_config, tmp_path)
+
+    response = client.get("/admin/config-ui")
+
+    assert response.status_code == 200
+    html = response.text
+    assert "expandedDatasetIds" in html
+    assert "expandedDatasetIds.has(id)" in html
+    assert "expandedDatasetIds.add(card.dataset.datasetId)" in html
+    assert "expandedDatasetIds.delete(card.dataset.datasetId)" in html
+    assert "expandedDatasetIds.add(card.dataset.datasetId); card.classList.remove(\"collapsed\")" in html
+    assert "expandedDatasetIds.delete(card.dataset.datasetId); card.classList.add(\"collapsed\")" in html
+
+
+def test_admin_config_ui_collapses_discovered_dataset_cards(monkeypatch, sample_gateway_config, tmp_path):
+    client = make_client(monkeypatch, sample_gateway_config, tmp_path)
+
+    response = client.get("/admin/config-ui")
+
+    assert response.status_code == 200
+    html = response.text
+    assert "discovered-card collapsed" in html
+    assert "candidate-card" in html
+    assert "发现的数据表" in html
+    assert "候选表" in html
+    assert "候选数据表清单" in html
+    assert "discovered-body" in html
+    assert "toggleDiscoveredCard" in html
+    assert "field-count" in html
+
+
+def test_admin_config_ui_has_quick_role_copy(monkeypatch, sample_gateway_config, tmp_path):
+    client = make_client(monkeypatch, sample_gateway_config, tmp_path)
+
+    response = client.get("/admin/config-ui")
+
+    assert response.status_code == 200
+    html = response.text
+    assert "quick-copy-source" in html
+    assert "quick-copy-target" in html
+    assert "copy-role-permissions" in html
+    assert "copyRolePermissions(card, datasetId" in html
+    assert "renderQuickCopyTargets" in html
+    assert "data-source-role" not in html
+
+
+def test_admin_config_ui_pending_approval_uses_readable_ascii_id(monkeypatch, sample_gateway_config, tmp_path):
+    client = make_client(monkeypatch, sample_gateway_config, tmp_path)
+
+    response = client.get("/admin/config-ui")
+
+    assert response.status_code == 200
+    html = response.text
+    assert "readableInternalId" in html
+    assert "pendingUser.name" in html
+    assert "pendingUser.open_id" in html
+    assert 'roles: ["analyst"]' in html
+
+
+def test_admin_config_ui_yaml_apply_supports_dumped_lists(monkeypatch, sample_gateway_config, tmp_path):
+    client = make_client(monkeypatch, sample_gateway_config, tmp_path)
+
+    response = client.get("/admin/config-ui")
+
+    assert response.status_code == 200
+    html = response.text
+    assert "parseYamlBlock(lines, index, indent)" in html
+    assert 'lines[index].text.startsWith("- ")' in html
+    assert 'itemText.includes(":")' in html
+    assert "暂不支持从 YAML 高级编辑解析列表" not in html
+
+
+def test_admin_config_ui_script_is_valid_javascript(monkeypatch, sample_gateway_config, tmp_path):
+    client = make_client(monkeypatch, sample_gateway_config, tmp_path)
+
+    response = client.get("/admin/config-ui")
+
+    assert response.status_code == 200
+    script = re.search(r"<script>(.*)</script>", response.text, re.S).group(1)
+    checker = tmp_path / "check-admin-ui-script.js"
+    checker.write_text("new Function(" + repr(script) + ");\n", encoding="utf-8")
+    result = subprocess.run(["node", str(checker)], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
 
 
 def test_admin_config_save_normalizes_empty_attributes(monkeypatch, sample_gateway_config, tmp_path):

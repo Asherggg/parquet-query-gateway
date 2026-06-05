@@ -118,7 +118,8 @@ def test_gateway_hosted_feishu_login_session_completes(monkeypatch, sample_gatew
 
     callback_response = client.get(f"/auth/feishu/callback?state={session_id}&code=auth-code")
     assert callback_response.status_code == 200
-    assert "login complete" in callback_response.text
+    assert "飞书登录成功" in callback_response.text
+    assert "可以关闭这个页面" in callback_response.text
 
     complete_response = client.get(f"/auth/feishu/login-session/{session_id}")
     assert complete_response.status_code == 200, complete_response.json()
@@ -158,6 +159,8 @@ def test_gateway_hosted_feishu_login_session_returns_unmapped_user_details(
 
     callback_response = client.get(f"/auth/feishu/callback?state={session_id}&code=auth-code")
     assert callback_response.status_code == 403
+    assert "飞书登录成功，但还没有网关权限" in callback_response.text
+    assert "请联系网关管理员开通权限" in callback_response.text
     assert "Alice Zhang" in callback_response.text
     assert "ou_alice" in callback_response.text
 
@@ -171,6 +174,49 @@ def test_gateway_hosted_feishu_login_session_returns_unmapped_user_details(
     assert "email" not in payload["details"]
 
 
+def test_gateway_hosted_feishu_login_session_records_unmapped_user_as_pending(
+    monkeypatch,
+    sample_gateway_config,
+    tmp_path,
+):
+    redirect_uri = "http://testserver/auth/feishu/callback"
+    config_path = write_feishu_config(sample_gateway_config, tmp_path / "feishu.yml", redirect_uri=redirect_uri)
+    raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    raw["auth"]["feishu_users"] = []
+    config_path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    monkeypatch.setenv("PARQUET_GATEWAY_CONFIG", str(config_path))
+    monkeypatch.setenv("PARQUET_GATEWAY_AUDIT_DB", str(tmp_path / "audit.sqlite3"))
+    reset_config_cache()
+    app = create_app(feishu_client=FakeFeishuOAuthClient(expected_redirect_uri=redirect_uri))
+    client = TestClient(app)
+
+    session_id = client.post("/auth/feishu/login-session").json()["session_id"]
+
+    first_response = client.get(f"/auth/feishu/callback?state={session_id}&code=auth-code")
+
+    assert first_response.status_code == 403
+    saved = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    assert saved["auth"]["feishu_users"] == []
+    assert saved["auth"]["pending_feishu_users"] == [
+        {
+            "open_id": "ou_alice",
+            "name": "Alice Zhang",
+        }
+    ]
+
+    second_session_id = client.post("/auth/feishu/login-session").json()["session_id"]
+    second_response = client.get(f"/auth/feishu/callback?state={second_session_id}&code=auth-code")
+
+    assert second_response.status_code == 403
+    saved = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    assert saved["auth"]["pending_feishu_users"] == [
+        {
+            "open_id": "ou_alice",
+            "name": "Alice Zhang",
+        }
+    ]
+
+
 def test_feishu_name_mapping_does_not_fall_back_to_email(monkeypatch, sample_gateway_config, tmp_path):
     config_path = write_feishu_config(sample_gateway_config, tmp_path / "feishu.yml")
     raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
@@ -178,6 +224,34 @@ def test_feishu_name_mapping_does_not_fall_back_to_email(monkeypatch, sample_gat
         {
             "email": "alice@example.com",
             "id": "alice-by-email",
+            "roles": ["analyst"],
+            "attributes": {},
+        }
+    ]
+    config_path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+
+    monkeypatch.setenv("PARQUET_GATEWAY_CONFIG", str(config_path))
+    monkeypatch.setenv("PARQUET_GATEWAY_AUDIT_DB", str(tmp_path / "audit.sqlite3"))
+    reset_config_cache()
+    app = create_app(feishu_client=FakeFeishuOAuthClient())
+    client = TestClient(app)
+
+    response = client.post(
+        "/auth/feishu/exchange",
+        json={"code": "auth-code", "redirect_uri": "http://127.0.0.1:8765/callback"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_feishu_name_mapping_does_not_fall_back_to_open_id(monkeypatch, sample_gateway_config, tmp_path):
+    config_path = write_feishu_config(sample_gateway_config, tmp_path / "feishu.yml")
+    raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    raw["auth"]["feishu_users"] = [
+        {
+            "open_id": "ou_alice",
+            "name": "Different Name",
+            "id": "alice-by-open-id",
             "roles": ["analyst"],
             "attributes": {},
         }
@@ -240,6 +314,28 @@ def test_unmapped_feishu_user_error_includes_profile(monkeypatch, sample_gateway
     assert error["details"]["open_id"] == "ou_alice"
     assert error["details"]["name"] == "Alice Zhang"
     assert "email" not in error["details"]
+
+
+def test_feishu_exchange_records_unmapped_user_as_pending(monkeypatch, sample_gateway_config, tmp_path):
+    config_path = write_feishu_config(sample_gateway_config, tmp_path / "feishu.yml")
+    raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    raw["auth"]["feishu_users"] = []
+    config_path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+
+    monkeypatch.setenv("PARQUET_GATEWAY_CONFIG", str(config_path))
+    monkeypatch.setenv("PARQUET_GATEWAY_AUDIT_DB", str(tmp_path / "audit.sqlite3"))
+    reset_config_cache()
+    app = create_app(feishu_client=FakeFeishuOAuthClient())
+    client = TestClient(app)
+
+    response = client.post(
+        "/auth/feishu/exchange",
+        json={"code": "auth-code", "redirect_uri": "http://127.0.0.1:8765/callback"},
+    )
+
+    assert response.status_code == 403
+    saved = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    assert saved["auth"]["pending_feishu_users"] == [{"open_id": "ou_alice", "name": "Alice Zhang"}]
 
 
 def test_feishu_http_error_becomes_auth_error(sample_gateway_config, tmp_path):

@@ -36,7 +36,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\client-install.ps1 -GatewayUr
 管理员只需要部署一次共享网关：
 
 ```bash
-git clone https://github.com/guo1jing12/parquet-query-gateway.git
+git clone https://github.com/Asherggg/parquet-query-gateway.git
 cd parquet-query-gateway
 bash scripts/install.sh --data-root /home/ai_ds/sd_data_center
 ```

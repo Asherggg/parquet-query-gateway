@@ -55,11 +55,17 @@ class FeishuUserConfig(BaseModel):
         return value
 
 
+class PendingFeishuUserConfig(BaseModel):
+    open_id: str | None = None
+    name: str | None = None
+
+
 class AuthConfig(BaseModel):
     gateway_token_secret: str
     token_ttl_seconds: int = Field(default=28_800, ge=60)
     feishu: FeishuConfig = Field(default_factory=FeishuConfig)
     feishu_users: list[FeishuUserConfig] = Field(default_factory=list)
+    pending_feishu_users: list[PendingFeishuUserConfig] = Field(default_factory=list)
 
 
 class DatasetConfig(BaseModel):

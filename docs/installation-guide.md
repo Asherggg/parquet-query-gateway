@@ -12,7 +12,7 @@
 请帮我安装 Parquet Query Gateway。
 
 安装目标：
-- 仓库：https://github.com/guo1jing12/parquet-query-gateway.git
+- 仓库：https://github.com/Asherggg/parquet-query-gateway.git
 - 数据目录：/home/ai_ds/sd_data_center
 - 部署方式：本机 Python 虚拟环境
 
@@ -64,7 +64,7 @@
 公开仓库后，用户执行：
 
 ```bash
-git clone https://github.com/guo1jing12/parquet-query-gateway.git
+git clone https://github.com/Asherggg/parquet-query-gateway.git
 cd parquet-query-gateway
 bash scripts/install.sh --data-root /home/ai_ds/sd_data_center
 ```
@@ -72,7 +72,7 @@ bash scripts/install.sh --data-root /home/ai_ds/sd_data_center
 Windows PowerShell：
 
 ```powershell
-git clone https://github.com/guo1jing12/parquet-query-gateway.git
+git clone https://github.com/Asherggg/parquet-query-gateway.git
 cd parquet-query-gateway
 .\scripts\install.ps1 -DataRoot "/home/ai_ds/sd_data_center"
 ```

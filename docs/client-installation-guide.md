@@ -6,7 +6,7 @@
 - 网关地址：`http://192.168.58.184:8080`
 - token，或飞书登录方式
 
-如果没有提供 token，客户端会通过网关创建一次性飞书登录会话并尝试打开浏览器。浏览器授权完成后会回到网关回调地址，命令行会自动轮询并把 token 保存到 `~/.parquet-gateway/token.json`。部分远程终端、受管 Windows 环境或默认浏览器策略不会自动弹出浏览器；这时请复制命令输出中的 Feishu authorization URL 到浏览器打开。
+如果没有提供 token，客户端会通过网关创建一次性飞书登录会话并尝试打开默认浏览器。浏览器授权完成后会回到网关回调地址，命令行会自动轮询并把 token 保存到 `~/.parquet-gateway/token.json`。部分远程终端、受管 Windows 环境或默认浏览器策略不会自动弹出浏览器；如果 5 秒内没有弹出浏览器，请复制命令输出中的 Feishu authorization URL 到浏览器打开。
 
 ## 给 AI Agent 的客户端安装任务
 
@@ -33,7 +33,7 @@
 
 如果无法访问网关地址，请暂停并把网络错误告诉我。
 如果网关没有开启飞书登录，且也没有提供 token，请暂停并把认证错误告诉我。
-如果没有弹出浏览器，请不要等待到超时；复制终端输出里的 Feishu authorization URL 到浏览器打开。
+如果 5 秒内没有弹出浏览器，请不要等待到超时；复制终端输出里的 Feishu authorization URL 到浏览器打开。
 如果飞书页面提示 redirect_uri 不匹配、应用不可用或无权限，请暂停并把页面错误告诉我。
 ```
 
@@ -93,11 +93,12 @@ opencli parquet login
 登录命令会优先使用网关中转 OAuth：命令行创建一次性登录会话，浏览器授权后回到网关，命令行自动轮询拿到 token。若浏览器没有自动弹出，请复制终端里输出的授权链接到浏览器打开：
 
 ```text
-If the browser does not open automatically, copy this authorization URL into your browser:
+Trying to open your default browser for Feishu authorization.
+If no browser opens within 5 seconds, copy this authorization URL into your browser:
 https://accounts.feishu.cn/open-apis/authen/v1/authorize?...
 ```
 
-正常情况下浏览器会显示 `Parquet Gateway login complete`，原来的终端会自动保存 token。如果网关暂时不支持中转登录，客户端会回退到本机 `127.0.0.1:8765/callback` 方式；这时如果浏览器停在 `http://127.0.0.1:8765/callback?code=...`，但页面显示无法访问，也可以复制 `code=` 后面的值手动换取 token：
+正常情况下浏览器会显示 `飞书登录成功`，原来的终端会自动保存 token。如果浏览器显示 `飞书登录成功，但还没有网关权限`，说明飞书授权本身已经通过，只是该飞书用户还没有加入网关权限配置，需要管理员开通权限。如果网关暂时不支持中转登录，客户端会回退到本机 `127.0.0.1:8765/callback` 方式；这时如果浏览器停在 `http://127.0.0.1:8765/callback?code=...`，但页面显示无法访问，也可以复制 `code=` 后面的值手动换取 token：
 
 ```powershell
 opencli.cmd parquet login "<复制出来的code>"
@@ -107,6 +108,18 @@ opencli.cmd parquet login "<复制出来的code>"
 
 ```powershell
 opencli.cmd parquet login --timeout 600
+```
+
+如果浏览器已经显示 `飞书登录成功`，但原来的终端被中断、关闭或超时，token 不会自动写回本地文件。此时不要重新授权，复制浏览器地址栏里的完整回调地址，执行：
+
+```powershell
+opencli.cmd parquet login --callback-url "http://192.168.58.184:8080/auth/feishu/callback?code=...&state=..."
+```
+
+如果只有 `state`，也可以恢复同一个登录会话：
+
+```powershell
+opencli.cmd parquet login --session-id "<state>"
 ```
 
 登录成功后，命令会返回 `PARQUET_GATEWAY_TOKEN`，也会保存到：

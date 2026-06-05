@@ -57,6 +57,17 @@ def test_opencli_plugin_login_is_one_click_flow():
     assert "http://127.0.0.1:8765/callback" in auth_source
 
 
+def test_opencli_plugin_login_can_recover_gateway_callback_session():
+    source = (ROOT / "login.js").read_text(encoding="utf-8")
+    auth_source = (ROOT / "auth-flow.js").read_text(encoding="utf-8")
+
+    assert "session-id" in source
+    assert "callback-url" in source
+    assert "completeGatewayLoginSession" in source
+    assert "completeGatewayLoginFromCallbackUrl" in source
+    assert "/auth/feishu/login-session/" in auth_source
+
+
 def test_opencli_plugin_query_uses_gateway_not_local_files():
     source = (ROOT / "query.js").read_text(encoding="utf-8")
     client_source = (ROOT / "gateway-client.js").read_text(encoding="utf-8")

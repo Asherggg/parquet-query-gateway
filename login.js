@@ -2,6 +2,8 @@ import { cli, Strategy } from '@jackwener/opencli/registry';
 import { gatewayBaseUrl } from './gateway-client.js';
 import {
   DEFAULT_REDIRECT_URI,
+  completeGatewayLoginFromCallbackUrl,
+  completeGatewayLoginSession,
   exchangeFeishuCode,
   loginWithFeishu,
   saveGatewayToken,
@@ -21,12 +23,26 @@ cli({
     { name: 'auth-url', help: 'Feishu authorization URL; defaults to PARQUET_FEISHU_AUTH_URL' },
     { name: 'token-path', help: 'Where to save the gateway token JSON' },
     { name: 'timeout', type: 'int', default: 180, help: 'Seconds to wait for local callback' },
+    { name: 'session-id', help: 'Recover and save a completed gateway login session by state/session id' },
+    { name: 'callback-url', help: 'Recover and save a completed gateway login session from the full Feishu callback URL' },
   ],
   columns: ['token_path', 'token_type', 'expires_in', 'PARQUET_GATEWAY_TOKEN'],
   func: async (args) => {
     const redirectUri = args['redirect-uri'] || process.env.PARQUET_FEISHU_REDIRECT_URI || DEFAULT_REDIRECT_URI;
     const savePath = args['token-path'] || tokenPath();
-    const payload = args.code
+    const payload = args['callback-url']
+      ? await completeGatewayLoginFromCallbackUrl({
+        gatewayUrl: gatewayBaseUrl(),
+        callbackUrl: args['callback-url'],
+        savePath,
+      })
+      : args['session-id']
+        ? await completeGatewayLoginSession({
+          gatewayUrl: gatewayBaseUrl(),
+          sessionId: args['session-id'],
+          savePath,
+        })
+        : args.code
       ? await exchangeFeishuCode({
         gatewayUrl: gatewayBaseUrl(),
         code: args.code,

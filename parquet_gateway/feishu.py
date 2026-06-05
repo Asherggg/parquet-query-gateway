@@ -164,8 +164,6 @@ def resolve_feishu_user(users: list[FeishuUserConfig], profile: dict) -> FeishuU
     open_id = profile.get("open_id")
     name = profile.get("name")
     for user in users:
-        if user.open_id and user.open_id == open_id:
-            return user
         if user.name and user.name == name:
             return user
     raise PermissionDenied(

@@ -17,6 +17,7 @@ class Principal:
     id: str
     roles: frozenset[str]
     attributes: dict[str, Any]
+    name: str | None = None
 
     @classmethod
     def from_config(cls, user: UserConfig) -> "Principal":
@@ -24,7 +25,7 @@ class Principal:
 
     @classmethod
     def from_feishu_config(cls, user: FeishuUserConfig) -> "Principal":
-        return cls(id=user.id, roles=frozenset(user.roles), attributes=dict(user.attributes))
+        return cls(id=user.id, roles=frozenset(user.roles), attributes=dict(user.attributes), name=user.name)
 
 
 class TokenAuthenticator:
@@ -54,11 +55,11 @@ def issue_gateway_token(config: GatewayConfig, principal: Principal, now: int | 
     expires_at = issued_at + config.auth.token_ttl_seconds
     payload = {
         "sub": principal.id,
-        "roles": sorted(principal.roles),
-        "attributes": principal.attributes,
         "iat": issued_at,
         "exp": expires_at,
     }
+    if principal.name:
+        payload["name"] = principal.name
     payload_b64 = b64url_encode(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8"))
     signature = sign(config.auth.gateway_token_secret, payload_b64)
     return f"pgw.{payload_b64}.{signature}", config.auth.token_ttl_seconds
@@ -80,11 +81,30 @@ def verify_gateway_token(config: GatewayConfig, token: str, now: int | None = No
         return None
     if int(payload.get("exp", 0)) < int(now or time.time()):
         return None
-    return Principal(
-        id=str(payload["sub"]),
-        roles=frozenset(str(role) for role in payload.get("roles", [])),
-        attributes=dict(payload.get("attributes", {})),
-    )
+    return resolve_dynamic_principal(config, payload)
+
+
+def resolve_dynamic_principal(config: GatewayConfig, payload: dict[str, Any]) -> Principal | None:
+    name = payload.get("name")
+    if name and config.auth is not None:
+        for user in config.auth.feishu_users:
+            if user.name == name:
+                return Principal.from_feishu_config(user)
+
+    # Backward compatibility for tokens issued before identity-only claims.
+    # These tokens did not carry a Feishu name, so resolve by the stable local id
+    # but still use current server-side roles and attributes.
+    subject = str(payload.get("sub") or "")
+    if not subject:
+        return None
+    for user in config.users:
+        if user.id == subject:
+            return Principal.from_config(user)
+    if config.auth is not None:
+        for user in config.auth.feishu_users:
+            if user.id == subject:
+                return Principal.from_feishu_config(user)
+    return None
 
 
 def b64url_encode(value: bytes) -> str:

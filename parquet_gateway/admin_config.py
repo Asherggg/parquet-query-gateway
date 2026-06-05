@@ -31,6 +31,35 @@ def save_admin_config_yaml(config_path: Path, yaml_text: str) -> dict[str, objec
     return {"valid": True, "path": str(config_path), "backup_path": str(backup_path)}
 
 
+def record_pending_feishu_user(config_path: Path, profile: dict[str, Any]) -> dict[str, object]:
+    pending_user = {
+        key: str(profile[key])
+        for key in ("open_id", "name")
+        if profile.get(key)
+    }
+    if not pending_user:
+        return {"recorded": False, "reason": "empty_profile"}
+
+    parsed = _load_yaml(config_path.read_text(encoding="utf-8"))
+    auth = parsed.setdefault("auth", {})
+    if not isinstance(auth, dict):
+        return {"recorded": False, "reason": "auth_not_configured"}
+
+    pending = auth.setdefault("pending_feishu_users", [])
+    if not isinstance(pending, list):
+        pending = []
+        auth["pending_feishu_users"] = pending
+
+    if _feishu_user_exists(auth.get("feishu_users", []), pending_user):
+        return {"recorded": False, "reason": "already_approved"}
+    if _feishu_user_exists(pending, pending_user):
+        return {"recorded": False, "reason": "already_pending"}
+
+    pending.append(pending_user)
+    config_path.write_text(yaml.safe_dump(parsed, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    return {"recorded": True, "user": pending_user}
+
+
 def discover_parquet_datasets(config: GatewayConfig) -> dict[str, object]:
     data_root = Path(config.settings.data_root)
     configured = set(config.datasets.keys())
@@ -105,6 +134,21 @@ def redact_config(value: Any) -> Any:
     if isinstance(value, list):
         return [redact_config(item) for item in value]
     return value
+
+
+def _feishu_user_exists(users: Any, profile: dict[str, str]) -> bool:
+    if not isinstance(users, list):
+        return False
+    open_id = profile.get("open_id")
+    name = profile.get("name")
+    for user in users:
+        if not isinstance(user, dict):
+            continue
+        if open_id and user.get("open_id") == open_id:
+            return True
+        if name and user.get("name") == name:
+            return True
+    return False
 
 
 def _load_yaml(text: str) -> dict[str, Any]:

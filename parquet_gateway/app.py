@@ -12,7 +12,12 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel
 from pydantic import ValidationError
 
-from parquet_gateway.admin_config import discover_parquet_datasets, read_admin_config, save_admin_config_yaml
+from parquet_gateway.admin_config import (
+    discover_parquet_datasets,
+    read_admin_config,
+    record_pending_feishu_user,
+    save_admin_config_yaml,
+)
 from parquet_gateway.admin_ui import ADMIN_CONFIG_UI_HTML
 from parquet_gateway.audit import AuditEvent, AuditLog
 from parquet_gateway.auth import Principal, TokenAuthenticator
@@ -37,10 +42,59 @@ class AdminConfigSaveRequest(BaseModel):
 
 CLIENT_PACKAGE_NAME = "parquet-query-gateway-client.zip"
 CLIENT_GUIDE_NAME = "client-installation-guide.md"
-CLIENT_VERSION = "0.1.4"
+CLIENT_VERSION = "0.1.6"
 CLIENT_DOWNLOAD_URL = f"/downloads/{CLIENT_PACKAGE_NAME}"
 CLIENT_GUIDE_URL = f"/{CLIENT_GUIDE_NAME}"
 LOGIN_SESSION_TTL_SECONDS = 600
+
+
+def feishu_login_page(title: str, body: str, *, status_code: int = 200) -> HTMLResponse:
+    return HTMLResponse(
+        f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{escape(title)}</title>
+  <style>
+    body {{
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #1f2937;
+      background: #f8fafc;
+    }}
+    main {{
+      max-width: 680px;
+      margin: 12vh auto;
+      padding: 0 24px;
+      line-height: 1.7;
+    }}
+    h1 {{
+      margin: 0 0 16px;
+      font-size: 28px;
+      font-weight: 650;
+    }}
+    p {{
+      margin: 0 0 12px;
+      color: #475569;
+    }}
+    ul {{
+      margin: 8px 0 0;
+      padding-left: 20px;
+      color: #475569;
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>{escape(title)}</h1>
+    {body}
+  </main>
+</body>
+</html>""",
+        status_code=status_code,
+        media_type="text/html; charset=utf-8",
+    )
 
 
 def create_app(feishu_client=None) -> FastAPI:
@@ -71,6 +125,10 @@ def create_app(feishu_client=None) -> FastAPI:
         if "admin" not in principal.roles:
             raise PermissionDenied("admin role is required")
         return principal
+
+    def record_pending_feishu_user_from_error(exc: GatewayError) -> None:
+        if exc.code == "permission_denied" and exc.details is not None:
+            record_pending_feishu_user(config_path(), exc.details)
 
     @app.exception_handler(GatewayError)
     async def gateway_error_handler(_, exc: GatewayError) -> JSONResponse:
@@ -206,7 +264,11 @@ def create_app(feishu_client=None) -> FastAPI:
 
     @app.post("/auth/feishu/exchange")
     def feishu_exchange(request: FeishuExchangeRequest) -> dict[str, object]:
-        return exchange_feishu_code_for_gateway_token(config, actual_feishu_client, request)
+        try:
+            return exchange_feishu_code_for_gateway_token(config, actual_feishu_client, request)
+        except GatewayError as exc:
+            record_pending_feishu_user_from_error(exc)
+            raise
 
     @app.get("/auth/feishu/authorize-url")
     def feishu_authorize_url(redirect_uri: str | None = None) -> dict[str, str]:
@@ -272,23 +334,26 @@ def create_app(feishu_client=None) -> FastAPI:
     ) -> HTMLResponse:
         purge_login_sessions()
         if not state or state not in login_sessions:
-            return HTMLResponse(
-                "<html><body>Parquet Gateway login session is missing or expired.</body></html>",
+            return feishu_login_page(
+                "登录会话已失效",
+                "<p>飞书授权回调没有匹配到有效的登录会话，请回到终端重新执行登录命令。</p>",
                 status_code=400,
             )
         session = login_sessions[state]
         if error:
             session["status"] = "error"
             session["message"] = error
-            return HTMLResponse(
-                f"<html><body>Parquet Gateway login failed: {escape(error)}</body></html>",
+            return feishu_login_page(
+                "飞书授权失败",
+                f"<p>飞书返回错误：{escape(error)}</p><p>请回到终端重新发起登录。</p>",
                 status_code=400,
             )
         if not code:
             session["status"] = "error"
             session["message"] = "Feishu callback did not include code"
-            return HTMLResponse(
-                "<html><body>Parquet Gateway login failed: callback did not include code.</body></html>",
+            return feishu_login_page(
+                "飞书授权失败",
+                "<p>飞书回调没有带回授权码，请回到终端重新发起登录。</p>",
                 status_code=400,
             )
         try:
@@ -302,6 +367,7 @@ def create_app(feishu_client=None) -> FastAPI:
             session["message"] = exc.message
             if exc.details is not None:
                 session["details"] = exc.details
+            record_pending_feishu_user_from_error(exc)
             details_html = ""
             if exc.details:
                 detail_items = "".join(
@@ -309,14 +375,28 @@ def create_app(feishu_client=None) -> FastAPI:
                     for key, value in exc.details.items()
                     if value is not None
                 )
-                details_html = f"<p>Details:</p><ul>{detail_items}</ul>"
-            return HTMLResponse(
-                f"<html><body>Parquet Gateway login failed: {escape(exc.message)}{details_html}</body></html>",
+                details_html = f"<p>当前识别到的飞书用户：</p><ul>{detail_items}</ul>"
+            if exc.code == "permission_denied":
+                return feishu_login_page(
+                    "飞书登录成功，但还没有网关权限",
+                    (
+                        "<p>你的飞书身份已经识别成功，但还没有被加入 Parquet Gateway 权限配置。</p>"
+                        "<p>请联系网关管理员开通权限，或提供有效的 PARQUET_GATEWAY_TOKEN。</p>"
+                        f"{details_html}"
+                    ),
+                    status_code=exc.status_code,
+                )
+            return feishu_login_page(
+                "飞书登录失败",
+                f"<p>{escape(exc.message)}</p>{details_html}",
                 status_code=exc.status_code,
             )
         session["status"] = "complete"
         session["payload"] = payload
-        return HTMLResponse("<html><body>Parquet Gateway login complete. You can close this window.</body></html>")
+        return feishu_login_page(
+            "飞书登录成功",
+            "<p>Parquet Gateway 已保存本次登录结果，终端会自动继续验证。</p><p>可以关闭这个页面。</p>",
+        )
 
     app.state.config = config
     app.state.audit = audit

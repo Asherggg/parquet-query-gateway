@@ -101,15 +101,21 @@ export async function loginWithGatewaySession({
   console.error([
     'Feishu login is waiting for gateway callback.',
     '',
-    'If the browser does not open automatically, copy this authorization URL into your browser:',
+    'Trying to open your default browser for Feishu authorization.',
+    'If no browser opens within 5 seconds, copy this authorization URL into your browser:',
     sessionPayload.auth_url,
     '',
     `After login, Feishu should return to ${sessionPayload.redirect_uri || 'the gateway callback URL'}.`,
     'This terminal will continue waiting and save the gateway token automatically.',
+    '',
+    'Keep this command running until it prints the saved token path.',
+    `If this command is interrupted after browser authorization, recover with: opencli parquet login --session-id ${sessionPayload.session_id}`,
+    'You can also paste the full browser callback URL with: opencli parquet login --callback-url "<callback-url>"',
   ].join('\n'));
   openBrowser(sessionPayload.auth_url);
 
   const deadline = Date.now() + timeoutSeconds * 1000;
+  let nextNoticeAt = Date.now() + Math.min(15000, Math.max(1000, pollIntervalMs));
   while (Date.now() < deadline) {
     const pollUrl = new URL(`/auth/feishu/login-session/${encodeURIComponent(sessionPayload.session_id)}`, gatewayUrl);
     const pollResponse = await fetch(pollUrl, { headers: { Accept: 'application/json' } });
@@ -127,9 +133,68 @@ export async function loginWithGatewaySession({
       const detailsSuffix = details ? `\n${details}` : '';
       throw new Error(`Feishu login failed: ${pollPayload.message || 'unknown error'}${detailsSuffix}`);
     }
+    if (Date.now() >= nextNoticeAt) {
+      const expiresIn = pollPayload.expires_in === undefined ? '' : ` session_expires_in=${pollPayload.expires_in}s`;
+      console.error(`Still waiting for Feishu browser authorization... session_id=${sessionPayload.session_id}${expiresIn}`);
+      nextNoticeAt = Date.now() + 15000;
+    }
     await sleep(pollIntervalMs);
   }
-  throw new Error(`Timed out waiting for Feishu gateway login after ${timeoutSeconds}s`);
+  throw new Error([
+    `Timed out waiting for Feishu gateway login after ${timeoutSeconds}s.`,
+    `If the browser already completed authorization, recover with: opencli parquet login --session-id ${sessionPayload.session_id}`,
+    'Or paste the full browser callback URL with: opencli parquet login --callback-url "<callback-url>"',
+  ].join('\n'));
+}
+
+export async function completeGatewayLoginFromCallbackUrl({
+  gatewayUrl,
+  callbackUrl,
+  savePath = tokenPath(),
+} = {}) {
+  if (!callbackUrl) throw new Error('--callback-url is required');
+  let parsed;
+  try {
+    parsed = new URL(callbackUrl);
+  } catch {
+    throw new Error('Invalid Feishu callback URL');
+  }
+  const sessionId = parsed.searchParams.get('state');
+  if (!sessionId) {
+    throw new Error('Feishu callback URL does not include state; cannot recover gateway login session');
+  }
+  return await completeGatewayLoginSession({ gatewayUrl, sessionId, savePath });
+}
+
+export async function completeGatewayLoginSession({
+  gatewayUrl,
+  sessionId,
+  savePath = tokenPath(),
+} = {}) {
+  if (!sessionId) throw new Error('--session-id is required');
+  const pollUrl = new URL(`/auth/feishu/login-session/${encodeURIComponent(sessionId)}`, gatewayUrl);
+  const response = await fetch(pollUrl, { headers: { Accept: 'application/json' } });
+  const payload = await readJsonResponse(response);
+  if (!response.ok) {
+    const message = payload?.error?.message || payload?.detail || response.statusText;
+    throw new Error(`Gateway login session failed: ${message}`);
+  }
+  if (payload.status === 'complete') {
+    await saveGatewayToken(savePath, payload);
+    return payload;
+  }
+  if (payload.status === 'error') {
+    const details = formatDetails(payload.details);
+    const detailsSuffix = details ? `\n${details}` : '';
+    throw new Error(`Feishu login failed: ${payload.message || 'unknown error'}${detailsSuffix}`);
+  }
+  if (payload.status === 'pending') {
+    throw new Error([
+      `Feishu login session ${sessionId} is still pending.`,
+      'Complete browser authorization first, then run this recovery command again.',
+    ].join('\n'));
+  }
+  throw new Error(`Feishu login session ${sessionId} is not complete`);
 }
 
 export async function exchangeFeishuCode({ gatewayUrl, code, redirectUri }) {
@@ -175,7 +240,8 @@ export async function loginViaBrowser({ authUrl, redirectUri, timeoutSeconds }) 
   console.error([
     'Feishu login is waiting for a browser callback.',
     '',
-    'If the browser does not open automatically, copy this authorization URL into your browser:',
+    'Trying to open your default browser for Feishu authorization.',
+    'If no browser opens within 5 seconds, copy this authorization URL into your browser:',
     authUrl,
     '',
     `After login, the browser should return to ${redirectUri}.`,
